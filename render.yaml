@@ -1,0 +1,35 @@
+# ============================================================
+# Smart Kitchen Replenishment System — Render Blueprint
+# ============================================================
+# To deploy via this file:
+#   1. Push your code to a GitHub repo
+#   2. In Render Dashboard → Blueprint → Connect your repo
+#   3. Render will auto-detect this render.yaml and deploy
+# ============================================================
+
+services:
+  # --- Backend API (FastAPI via Docker) ---
+  - type: web
+    name: smart-kitchen-api
+    runtime: docker
+    repo: https://github.com/chinmay2975-crypto/smart-kitchen-replinishment
+    plan: free
+    region: oregon  # or singapore for Asia
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql+asyncpg://postgres:Chinmay2005%@db.eqjianefzeaighbjegye.supabase.co:6543/postgres?ssl=require
+      - key: SUPABASE_URL
+        value: https://eqjianefzeaighbjegye.supabase.co
+      - key: SECRET_KEY
+        value: d85669c6c3e74554476c5ec4d4407ae9cba3b963e8e8d138ea59c22abdbc2e7c
+      - key: SERVER_TOKEN
+        value: smart_kitchen_server_token_2024
+      - key: EVALUATION_INTERVAL_SECONDS
+        value: "30"
+      - key: TELEMETRY_INTERVAL_SECONDS
+        value: "10"
+      - key: ENABLE_SIMULATION
+        value: "false"
+      # Render automatically sets PORT env variable

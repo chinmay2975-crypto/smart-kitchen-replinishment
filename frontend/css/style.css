@@ -1,0 +1,119 @@
+/* Custom Styles for Smart Kitchen Dashboard */
+
+.tab-btn {
+    transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+    color: #059669;
+    border-bottom-color: #059669;
+}
+
+.inventory-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.inventory-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar {
+    transition: width 1s ease;
+}
+
+.status-ok {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.status-low {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.status-out {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.order-status-pending {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.order-status-approved {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.order-status-shipped {
+    background-color: #e0e7ff;
+    color: #3730a3;
+}
+
+.order-status-delivered {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.order-status-cancelled {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+#toast {
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Loading spinner */
+.loading-spinner {
+    border: 3px solid #e5e7eb;
+    border-top: 3px solid #059669;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Device card */
+.device-card {
+    transition: transform 0.2s ease;
+}
+
+.device-card:hover {
+    transform: translateY(-3px);
+}
+
+/* Online indicator */
+.online-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.online-dot.online {
+    background-color: #10b981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.online-dot.offline {
+    background-color: #9ca3af;
+}

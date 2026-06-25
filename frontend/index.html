@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Kitchen - Automated Replenishment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-gray-50">
+    <div id="app" class="min-h-screen">
+        <!-- Auth Pages -->
+        <div id="auth-page" class="hidden">
+            <div id="welcome-page" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100">
+                <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full mx-4 text-center">
+                    <div class="text-6xl mb-4">🍳</div>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-2">Smart Kitchen</h1>
+                    <p class="text-gray-500 mb-8">Automated Replenishment System</p>
+                    <button onclick="showPage('login-page')" class="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition mb-3">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Login
+                    </button>
+                    <button onclick="showPage('register-page')" class="w-full bg-white text-emerald-600 border-2 border-emerald-600 py-3 rounded-lg font-semibold hover:bg-emerald-50 transition">
+                        <i class="fas fa-user-plus mr-2"></i>Register
+                    </button>
+                </div>
+            </div>
+
+            <div id="login-page" class="hidden min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+                <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full mx-4">
+                    <div class="text-center mb-6">
+                        <div class="text-4xl mb-2">🔐</div>
+                        <h2 class="text-2xl font-bold text-gray-800">Welcome Back</h2>
+                        <p class="text-gray-500">Sign in to your account</p>
+                    </div>
+                    <form id="login-form" onsubmit="handleLogin(event)">
+                        <div id="login-error" class="hidden"></div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-medium mb-2">Email</label>
+                            <input type="email" id="login-email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        </div>
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-medium mb-2">Password</label>
+                            <input type="password" id="login-password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        </div>
+                        <button type="submit" class="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition">
+                            <i class="fas fa-sign-in-alt mr-2"></i>Sign In
+                        </button>
+                    </form>
+                    <p class="text-center mt-4 text-gray-500">
+                        Don't have an account? <a href="#" onclick="showPage('register-page')" class="text-emerald-600 hover:underline">Register</a>
+                    </p>
+                    <p class="text-center mt-2">
+                        <a href="#" onclick="showPage('welcome-page')" class="text-gray-400 hover:underline text-sm">← Back</a>
+                    </p>
+                </div>
+            </div>
+
+            <div id="register-page" class="hidden min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-pink-100">
+                <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full mx-4">
+                    <div class="text-center mb-6">
+                        <div class="text-4xl mb-2">📝</div>
+                        <h2 class="text-2xl font-bold text-gray-800">Create Account</h2>
+                        <p class="text-gray-500">Join Smart Kitchen today</p>
+                    </div>
+                    <form id="register-form" onsubmit="handleRegister(event)">
+                        <div id="register-error" class="hidden"></div>
+                        <div class="mb-3">
+                            <label class="block text-gray-700 text-sm font-medium mb-2">Full Name</label>
+                            <input type="text" id="reg-name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        </div>
+                        <div class="mb-3">
+                            <label class="block text-gray-700 text-sm font-medium mb-2">Email</label>
+                            <input type="email" id="reg-email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        </div>
+                        <div class="mb-3">
+                            <label class="block text-gray-700 text-sm font-medium mb-2">Phone Number</label>
+                            <input type="tel" id="reg-phone" required placeholder="+919876543210" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        </div>
+                        <div class="mb-3">
+                            <label class="block text-gray-700 text-sm font-medium mb-2">Password</label>
+                            <input type="password" id="reg-password" required minlength="6" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-medium mb-2">Confirm Password</label>
+                            <input type="password" id="reg-confirm" required minlength="6" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        </div>
+                        <button type="submit" class="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition">
+                            <i class="fas fa-user-plus mr-2"></i>Register
+                        </button>
+                    </form>
+                    <p class="text-center mt-4 text-gray-500">
+                        Already have an account? <a href="#" onclick="showPage('login-page')" class="text-emerald-600 hover:underline">Login</a>
+                    </p>
+                    <p class="text-center mt-2">
+                        <a href="#" onclick="showPage('welcome-page')" class="text-gray-400 hover:underline text-sm">← Back</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main App (Dashboard) -->
+        <div id="main-app" class="hidden">
+            <!-- Top Navigation -->
+            <nav class="bg-white shadow-sm border-b">
+                <div class="max-w-7xl mx-auto px-4">
+                    <div class="flex justify-between h-16">
+                        <div class="flex items-center">
+                            <span class="text-2xl mr-2">🍳</span>
+                            <span class="text-xl font-bold text-gray-800">Smart Kitchen</span>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <span id="user-name-display" class="text-gray-600 text-sm"></span>
+                            <button onclick="handleLogout()" class="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                                <i class="fas fa-sign-out-alt mr-1"></i>Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Tab Navigation -->
+            <div class="bg-white border-b">
+                <div class="max-w-7xl mx-auto px-4">
+                    <div class="flex space-x-1">
+                        <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn active px-6 py-3 text-sm font-medium border-b-2 border-emerald-600 text-emerald-600">
+                            <i class="fas fa-chart-pie mr-2"></i>Dashboard
+                        </button>
+                        <button onclick="switchTab('devices')" id="tab-devices" class="tab-btn px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent">
+                            <i class="fas fa-microchip mr-2"></i>My Devices
+                        </button>
+                        <button onclick="switchTab('profile')" id="tab-profile" class="tab-btn px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent">
+                            <i class="fas fa-user mr-2"></i>Profile
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="max-w-7xl mx-auto px-4 py-6">
+                <!-- Dashboard Tab -->
+                <div id="content-dashboard" class="tab-content">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Inventory Dashboard</h2>
+                        <span class="text-sm text-gray-500" id="last-updated">Updating...</span>
+                    </div>
+
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-500">
+                            <div class="text-sm text-gray-500">Total Items</div>
+                            <div class="text-2xl font-bold text-gray-800" id="total-items">0</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-yellow-500">
+                            <div class="text-sm text-gray-500">Low Stock</div>
+                            <div class="text-2xl font-bold text-yellow-600" id="low-stock-count">0</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500">
+                            <div class="text-sm text-gray-500">Out of Stock</div>
+                            <div class="text-2xl font-bold text-red-600" id="out-of-stock-count">0</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
+                            <div class="text-sm text-gray-500">Orders</div>
+                            <div class="text-2xl font-bold text-blue-600" id="order-count">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Inventory Grid -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-4">Current Inventory</h3>
+                        <div id="inventory-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Orders Table -->
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700 mb-4">Recent Replenishment Orders</h3>
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                            <div id="orders-table-container">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Devices Tab -->
+                <div id="content-devices" class="tab-content hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">My Devices</h2>
+                        <button onclick="showClaimDeviceModal()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition">
+                            <i class="fas fa-plus mr-1"></i>Claim Device
+                        </button>
+                    </div>
+                    <div id="devices-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Profile Tab -->
+                <div id="content-profile" class="tab-content hidden">
+                    <div class="max-w-2xl mx-auto">
+                        <div class="bg-white rounded-xl shadow-sm p-6">
+                            <div class="text-center mb-6">
+                                <div class="text-6xl mb-4">👤</div>
+                                <h2 class="text-2xl font-bold text-gray-800" id="profile-name"></h2>
+                                <p class="text-gray-500" id="profile-email"></p>
+                            </div>
+                            <div class="border-t pt-4">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-sm text-gray-500">Phone</label>
+                                        <p class="font-medium" id="profile-phone"></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-gray-500">Role</label>
+                                        <p class="font-medium" id="profile-role"></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-gray-500">Household</label>
+                                        <p class="font-medium" id="profile-household"></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-gray-500">User ID</label>
+                                        <p class="font-medium text-xs text-gray-400" id="profile-userid"></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Claim Device Modal -->
+    <div id="claim-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-xl max-w-md w-full mx-4">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Claim a Device</h3>
+            <form id="claim-form" onsubmit="handleClaimDevice(event)">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Device UID / MAC Address</label>
+                    <input type="text" id="claim-uid" required placeholder="e.g. kitchen/pantry/scale_001" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Device Name</label>
+                    <input type="text" id="claim-name" required placeholder="e.g. Pantry Scale" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                </div>
+                <div class="flex space-x-3">
+                    <button type="submit" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition">
+                        <i class="fas fa-check mr-1"></i>Claim
+                    </button>
+                    <button type="button" onclick="hideClaimDeviceModal()" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-300 transition">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="hidden fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg z-50"></div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/devices.js"></script>
+    <script src="js/profile.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

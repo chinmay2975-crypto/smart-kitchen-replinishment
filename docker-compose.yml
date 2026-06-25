@@ -1,0 +1,24 @@
+services:
+  postgres-timescaledb:
+    image: timescale/timescaledb:2.15.0-pg16
+    container_name: smart-kitchen-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smart_kitchen
+      POSTGRES_USER: kitchen_admin
+      POSTGRES_PASSWORD: KitchenSecure2026
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kitchen_admin -d smart_kitchen"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  pgdata:
+    driver: local

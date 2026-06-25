@@ -1,0 +1,172 @@
+// API Configuration and Client
+// Change this to your Render backend URL after deployment
+const API_BASE = 'https://smart-kitchen-api.onrender.com';
+
+class ApiClient {
+    constructor() {
+        this.token = localStorage.getItem('access_token');
+        this.refreshToken = localStorage.getItem('refresh_token');
+    }
+
+    setTokens(access, refresh) {
+        this.token = access;
+        this.refreshToken = refresh;
+        localStorage.setItem('access_token', access);
+        localStorage.setItem('refresh_token', refresh);
+    }
+
+    clearTokens() {
+        this.token = null;
+        this.refreshToken = null;
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_data');
+    }
+
+    isAuthenticated() {
+        return !!this.token;
+    }
+
+    async parseResponse(response) {
+        const contentType = response.headers.get('content-type') || '';
+        try {
+            if (contentType.includes('application/json')) {
+                return await response.json();
+            }
+
+            const text = await response.text();
+            return text ? { detail: text } : {};
+        } catch (error) {
+            console.error('Failed to parse API response:', error);
+            return { detail: 'Server returned an unreadable response' };
+        }
+    }
+
+    getErrorMessage(data, fallback = 'Request failed') {
+        if (!data) return fallback;
+        if (typeof data.detail === 'string') return data.detail;
+        if (Array.isArray(data.detail)) {
+            return data.detail
+                .map(error => {
+                    const location = Array.isArray(error.loc) ? error.loc.join('.') : '';
+                    return `${location ? `${location}: ` : ''}${error.msg || 'Invalid value'}`;
+                })
+                .join('\n');
+        }
+        if (typeof data.message === 'string') return data.message;
+        if (typeof data.error === 'string') return data.error;
+        return fallback;
+    }
+
+    async request(endpoint, options = {}) {
+        const url = `${API_BASE}${endpoint}`;
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers,
+        };
+
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`;
+        }
+
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers,
+            });
+
+            const isAuthEndpoint = endpoint.startsWith('/api/v1/auth/login')
+                || endpoint.startsWith('/api/v1/auth/register')
+                || endpoint.startsWith('/api/v1/auth/refresh');
+
+            if (response.status === 401 && this.refreshToken && !isAuthEndpoint) {
+                // Try to refresh the token
+                const refreshed = await this.refreshAccessToken();
+                if (refreshed) {
+                    headers['Authorization'] = `Bearer ${this.token}`;
+                    const retryResponse = await fetch(url, {
+                        ...options,
+                        headers,
+                    });
+                    return retryResponse;
+                }
+            }
+
+            return response;
+        } catch (error) {
+            console.error('API request failed:', error);
+            throw error;
+        }
+    }
+
+    async refreshAccessToken() {
+        try {
+            const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: this.refreshToken }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.setTokens(data.access_token, data.refresh_token);
+                return true;
+            }
+        } catch (error) {
+            console.error('Token refresh failed:', error);
+        }
+        this.clearTokens();
+        return false;
+    }
+
+    // Auth endpoints
+    async register(name, email, phone, password) {
+        const response = await this.request('/api/v1/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ name, email, phone, password }),
+        });
+        return response;
+    }
+
+    async login(email, password) {
+        const response = await this.request('/api/v1/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password }),
+        });
+        return response;
+    }
+
+    // Dashboard
+    async getDashboardData() {
+        const response = await this.request('/api/v1/dashboard-data');
+        return response;
+    }
+
+    // Devices
+    async getDevices() {
+        const response = await this.request('/api/v1/devices/');
+        return response;
+    }
+
+    async getDeviceDetail(deviceId) {
+        const response = await this.request(`/api/v1/devices/${deviceId}`);
+        return response;
+    }
+
+    async claimDevice(deviceUid, deviceName) {
+        const response = await this.request('/api/v1/devices/claim', {
+            method: 'POST',
+            body: JSON.stringify({ device_uid: deviceUid, device_name: deviceName }),
+        });
+        return response;
+    }
+
+    // Profile
+    async getProfile() {
+        const response = await this.request('/api/v1/profile');
+        return response;
+    }
+}
+
+// Global API instance
+const api = new ApiClient();
