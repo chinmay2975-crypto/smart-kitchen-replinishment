@@ -108,33 +108,38 @@ async def verify_otp(req: VerifyOtpRequest):
 @router.post("/register", response_model=AuthResponse)
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """Register a new user. Creates user + household + preferences."""
-    email = req.email.strip().lower()
-    name = req.name.strip()
-    phone = req.phone.strip()
-
-    # Check if email already exists
-    existing = await db.execute(
-        text("SELECT user_id FROM app_users WHERE email = :email"),
-        {"email": email},
-    )
-    if existing.first():
-        raise HTTPException(status_code=409, detail="Email already registered")
-
-    # Check if phone already exists
-    existing_phone = await db.execute(
-        text("SELECT user_id FROM app_users WHERE phone = :phone"),
-        {"phone": phone},
-    )
-    if existing_phone.first():
-        raise HTTPException(status_code=409, detail="Phone number already registered")
-
-    user_id = uuid.uuid4()
-    household_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
-    password_hash = get_password_hash(req.password)
-
+    logger.info("Registration attempt for email: %s", req.email)
+    
     try:
+        email = req.email.strip().lower()
+        name = req.name.strip()
+        phone = req.phone.strip()
+
+        # Check if email already exists
+        existing = await db.execute(
+            text("SELECT user_id FROM app_users WHERE email = :email"),
+            {"email": email},
+        )
+        if existing.first():
+            logger.warning("Registration failed: email %s already exists", email)
+            raise HTTPException(status_code=409, detail="Email already registered")
+
+        # Check if phone already exists
+        existing_phone = await db.execute(
+            text("SELECT user_id FROM app_users WHERE phone = :phone"),
+            {"phone": phone},
+        )
+        if existing_phone.first():
+            logger.warning("Registration failed: phone %s already exists", phone)
+            raise HTTPException(status_code=409, detail="Phone number already registered")
+
+        user_id = uuid.uuid4()
+        household_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+        password_hash = get_password_hash(req.password)
+
         # Create user
+        logger.info("Creating user %s with household %s", user_id, household_id)
         await db.execute(
             text("""
                 INSERT INTO app_users (user_id, email, password_hash, full_name, phone, role, is_active, created_at, updated_at)
@@ -183,14 +188,19 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         )
 
         await db.commit()
+        logger.info("Successfully registered user %s with household %s", email, household_id)
     except IntegrityError as exc:
         await db.rollback()
-        logger.warning("Registration integrity error for %s: %s", email, exc)
+        logger.error("Registration integrity error for %s: %s", email, exc, exc_info=True)
         raise HTTPException(status_code=409, detail="Email or phone number already registered")
     except SQLAlchemyError as exc:
         await db.rollback()
-        logger.exception("Registration database error for %s", email)
+        logger.error("Registration database error for %s: %s", email, exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Registration failed due to a database error")
+    except Exception as exc:
+        await db.rollback()
+        logger.error("Registration unexpected error for %s: %s", email, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Registration failed due to an unexpected error")
 
     access_token = create_access_token({"sub": str(user_id), "email": email})
     refresh_token = create_refresh_token({"sub": str(user_id)})
@@ -209,47 +219,60 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/login", response_model=AuthResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Login with email and password."""
-    email = req.email.strip().lower()
-
-    if not email or not req.password:
-        raise invalid_credentials_exception()
-
-    result = await db.execute(
-        text("""
-            SELECT u.user_id, u.email, u.full_name, u.phone, u.password_hash,
-                   h.household_id
-            FROM app_users u
-            LEFT JOIN households h ON h.owner_id = u.user_id
-            WHERE u.email = :email AND u.is_active = TRUE
-        """),
-        {"email": email},
-    )
-    row = result.first()
-    if not row:
-        raise invalid_credentials_exception()
-
+    logger.info("Login attempt for email: %s", req.email)
+    
     try:
-        password_is_valid = verify_password(req.password, row[4])
+        email = req.email.strip().lower()
+
+        if not email or not req.password:
+            logger.warning("Login failed: missing email or password")
+            raise invalid_credentials_exception()
+
+        result = await db.execute(
+            text("""
+                SELECT u.user_id, u.email, u.full_name, u.phone, u.password_hash,
+                       h.household_id
+                FROM app_users u
+                LEFT JOIN households h ON h.owner_id = u.user_id
+                WHERE u.email = :email AND u.is_active = TRUE
+            """),
+            {"email": email},
+        )
+        row = result.first()
+        if not row:
+            logger.warning("Login failed: user %s not found", email)
+            raise invalid_credentials_exception()
+
+        try:
+            password_is_valid = verify_password(req.password, row[4])
+        except Exception as exc:
+            logger.error("Password verification error for %s: %s", email, exc, exc_info=True)
+            password_is_valid = False
+
+        if not password_is_valid:
+            logger.warning("Login failed: invalid password for %s", email)
+            raise invalid_credentials_exception()
+
+        user_id = row[0]
+        access_token = create_access_token({"sub": str(user_id), "email": row[1]})
+        refresh_token = create_refresh_token({"sub": str(user_id)})
+        
+        logger.info("Login successful for user %s (ID: %s)", email, user_id)
+
+        return AuthResponse(
+            user_id=str(user_id),
+            email=row[1],
+            name=row[2],
+            phone=row[3],
+            household_id=str(row[5]) if row[5] else None,
+            access_token=access_token,
+            refresh_token=refresh_token,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.warning("Password verification failed for %s due to stored hash error: %s", email, exc)
-        password_is_valid = False
-
-    if not password_is_valid:
-        raise invalid_credentials_exception()
-
-    user_id = row[0]
-    access_token = create_access_token({"sub": str(user_id), "email": row[1]})
-    refresh_token = create_refresh_token({"sub": str(user_id)})
-
-    return AuthResponse(
-        user_id=str(user_id),
-        email=row[1],
-        name=row[2],
-        phone=row[3],
-        household_id=str(row[5]) if row[5] else None,
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
+        logger.error("Login unexpected error for %s: %s", email, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Login failed due to an unexpected error")
 
 
 @router.post("/refresh", response_model=dict)

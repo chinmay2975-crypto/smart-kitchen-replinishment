@@ -1,3 +1,5 @@
+import logging
+import os
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -7,15 +9,23 @@ from sqlalchemy import text
 from app.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger("smart_kitchen.database")
+
+# Safety: ensure the database URL uses the asyncpg dialect
+# This handles cases where the env var might use postgresql:// instead of postgresql+asyncpg://
+database_url = settings.database_url
+if database_url and database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    logger.info("Converted database URL to use asyncpg dialect")
 
 # For Supabase, SSL is required. The connection string already has ?ssl=require
 # appended in the .env / config defaults.
 engine = create_async_engine(
-    settings.database_url,
+    database_url,
     pool_size=5,
     max_overflow=10,
     echo=False,
-    connect_args={"ssl": "require"} if "supabase" in settings.database_url else {},
+    connect_args={"ssl": "require"} if "supabase" in database_url else {},
 )
 
 async_session_factory = async_sessionmaker(
@@ -26,11 +36,16 @@ async_session_factory = async_sessionmaker(
 
 
 async def get_db():
-    async with async_session_factory() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    """Dependency that provides a database session."""
+    try:
+        async with async_session_factory() as session:
+            try:
+                yield session
+            finally:
+                await session.close()
+    except Exception as e:
+        logger.error("Database session error: %s", e, exc_info=True)
+        raise
 
 
 async def ensure_auth_tables() -> None:

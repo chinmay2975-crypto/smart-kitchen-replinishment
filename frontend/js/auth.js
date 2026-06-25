@@ -77,7 +77,7 @@ async function handleRegister(event) {
         }
     } catch (error) {
         console.error('Registration error:', error);
-        const message = 'Network error. Is the backend server running at http://127.0.0.1:8000?';
+        const message = 'Network error. Please check your internet connection and try again.';
         showFormMessage('register-error', message);
         showToast(message, 'error');
     } finally {
@@ -112,7 +112,7 @@ async function handleLogin(event) {
         }
     } catch (error) {
         console.error('Login error:', error);
-        const message = 'Network error. Is the backend server running at http://127.0.0.1:8000?';
+        const message = 'Network error. Please check your internet connection and try again.';
         showFormMessage('login-error', message);
         showToast(message, 'error');
     } finally {

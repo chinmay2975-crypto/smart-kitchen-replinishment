@@ -116,23 +116,11 @@ app = FastAPI(
 )
 
 # CORS — allow requests from the frontend domains
-# Allow specific origins in production, or wildcard for now (tighten as needed)
-_is_supabase = "supabase" in settings.database_url
-if _is_supabase:
-    # In production, we restrict origins to known frontend URLs
-    cors_origins = [
-        "https://smart-kitchen-api.onrender.com",
-        "https://eqjianefzeaighbjegye.supabase.co",
-        # Add your frontend URL here after deployment
-    ]
-else:
-    cors_origins = ["*"]
-
+# Using highly permissive configuration to ensure browser requests are not blocked
 app.add_middleware(
     CORSMiddleware,
-    # In production mode (Supabase), use the restricted list; otherwise allow all for dev
-    allow_origins=cors_origins if _is_supabase else ["*"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -150,7 +138,7 @@ async def root():
         "service": "Smart Kitchen Automated Replenishment System",
         "status": "running",
         "version": "1.0.0",
-        "environment": "production" if _is_supabase else "development",
+        "environment": "production",
     }
 
 
