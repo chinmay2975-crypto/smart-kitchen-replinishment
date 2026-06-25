@@ -29,16 +29,19 @@ async def run_replenishment_engine() -> None:
     while True:
         try:
             await _evaluate_and_order()
-        except Exception:
-            logger.exception("Error in replenishment evaluation tick")
+        except Exception as e:
+            logger.error("Error in replenishment evaluation tick: %s", e, exc_info=True)
+            # Wait longer before retrying after an error
+            await asyncio.sleep(min(settings.evaluation_interval_seconds * 2, 300))
         await asyncio.sleep(settings.evaluation_interval_seconds)
 
 
 async def _evaluate_and_order() -> None:
     """Single evaluation tick."""
-    async with async_session_factory() as session:
-        # Step 1: Query the low-stock view for items that need attention
-        low_stock_result = await session.execute(
+    try:
+        async with async_session_factory() as session:
+            # Step 1: Query the low-stock view for items that need attention
+            low_stock_result = await session.execute(
             text("""
                 SELECT
                     v.household_id,
@@ -111,6 +114,9 @@ async def _evaluate_and_order() -> None:
             await _process_group(session, household_id, supplier_id, items)
 
         await session.commit()
+    except Exception as e:
+        logger.error("Error in _evaluate_and_order: %s", e, exc_info=True)
+        raise
 
 
 async def _process_group(
