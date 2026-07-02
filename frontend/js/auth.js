@@ -68,6 +68,15 @@ async function handleRegister(event) {
         if (response.ok) {
             api.setTokens(data.access_token, data.refresh_token);
             localStorage.setItem('user_data', JSON.stringify(data));
+
+            // Verify the token was actually saved before proceeding
+            if (!api.isAuthenticated()) {
+                console.error('Registration succeeded but token was not saved. Backend response keys:', Object.keys(data));
+                showFormMessage('register-error', 'Authentication token missing from server response. Please try logging in.');
+                showToast('Token missing — please log in', 'error');
+                return;
+            }
+
             showToast('Registration successful!');
             enterApp(data);
         } else {
@@ -97,18 +106,45 @@ async function handleLogin(event) {
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Signing In...';
 
     try {
+        console.log('Attempting login for:', email);
         const response = await api.login(email, password);
         const data = await api.parseResponse(response);
+        console.log('Login response status:', response.status);
+        console.log('Login response data:', data);
 
         if (response.ok) {
             api.setTokens(data.access_token, data.refresh_token);
             localStorage.setItem('user_data', JSON.stringify(data));
-            showToast('Login successful!');
-            enterApp(data);
+
+            // Verify the token was actually saved before proceeding
+            if (!api.isAuthenticated()) {
+                console.error('Login succeeded but token was not saved. Backend response keys:', Object.keys(data));
+                showFormMessage('login-error', 'Authentication token missing from server response.');
+                showToast('Token missing — please try again', 'error');
+                return;
+            }
+
+            showToast('Login successful!', 'success');
+            showFormMessage('login-error', '');
+            setTimeout(() => enterApp(data), 500);
         } else {
             const message = api.getErrorMessage(data, 'Login failed');
-            showFormMessage('login-error', message);
-            showToast(message, 'error');
+            console.error('Login failed:', message);
+            
+            // Provide more descriptive messages based on HTTP status code
+            let displayMessage = message;
+            if (response.status === 500) {
+                displayMessage = 'Server error. Please try again in a few moments.';
+            } else if (response.status === 503) {
+                displayMessage = message; // Use the specific message from backend (DB unavailable)
+            } else if (response.status === 401) {
+                displayMessage = 'Invalid email or password. Please check your credentials.';
+            } else if (response.status === 422) {
+                displayMessage = 'Please enter a valid email and password.';
+            }
+            
+            showFormMessage('login-error', displayMessage);
+            showToast(displayMessage, 'error');
         }
     } catch (error) {
         console.error('Login error:', error);

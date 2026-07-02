@@ -3,7 +3,8 @@ import random
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -106,8 +107,30 @@ async def verify_otp(req: VerifyOtpRequest):
 
 
 @router.post("/register", response_model=AuthResponse)
-async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, db: AsyncSession = Depends(get_db)):
     """Register a new user. Creates user + household + preferences."""
+    # Get the raw request body to see what was sent
+    try:
+        body = await request.json()
+        logger.info("Registration attempt with data: %s", body)
+    except Exception:
+        logger.warning("Could not parse request body")
+        body = {}
+    
+    # Validate the request manually to get better error messages
+    try:
+        req = RegisterRequest(**body)
+    except RequestValidationError as e:
+        logger.error("Validation error: %s", e.errors())
+        # Extract the first error message
+        errors = e.errors()
+        if errors:
+            error = errors[0]
+            field = error.get('loc', ['unknown'])[0] if error.get('loc') else 'unknown'
+            msg = error.get('msg', 'Validation error')
+            raise HTTPException(status_code=422, detail=f"{field}: {msg}")
+        raise HTTPException(status_code=422, detail="Validation error")
+    
     logger.info("Registration attempt for email: %s", req.email)
     
     try:
@@ -228,34 +251,63 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
             logger.warning("Login failed: missing email or password")
             raise invalid_credentials_exception()
 
-        result = await db.execute(
-            text("""
-                SELECT u.user_id, u.email, u.full_name, u.phone, u.password_hash,
-                       h.household_id
-                FROM app_users u
-                LEFT JOIN households h ON h.owner_id = u.user_id
-                WHERE u.email = :email AND u.is_active = TRUE
-            """),
-            {"email": email},
-        )
+        # Step 1: Query the database for the user
+        try:
+            result = await db.execute(
+                text("""
+                    SELECT u.user_id, u.email, u.full_name, u.phone, u.password_hash,
+                           h.household_id
+                    FROM app_users u
+                    LEFT JOIN households h ON h.owner_id = u.user_id
+                    WHERE u.email = :email AND u.is_active = TRUE
+                """),
+                {"email": email},
+            )
+        except Exception as exc:
+            logger.error("Login database query error for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=503,
+                detail="Login failed: database is temporarily unavailable. Please try again."
+            )
+
         row = result.first()
         if not row:
             logger.warning("Login failed: user %s not found", email)
             raise invalid_credentials_exception()
 
+        # Step 2: Verify the password hash exists and is valid
+        stored_hash = row[4]
+        if not stored_hash:
+            logger.error("Login failed: user %s has no password hash stored", email)
+            raise HTTPException(
+                status_code=500,
+                detail="Login failed: account configuration error. Please contact support."
+            )
+
         try:
-            password_is_valid = verify_password(req.password, row[4])
+            password_is_valid = verify_password(req.password, stored_hash)
         except Exception as exc:
             logger.error("Password verification error for %s: %s", email, exc, exc_info=True)
-            password_is_valid = False
+            raise HTTPException(
+                status_code=500,
+                detail="Login failed: password verification error. Please try again."
+            )
 
         if not password_is_valid:
             logger.warning("Login failed: invalid password for %s", email)
             raise invalid_credentials_exception()
 
+        # Step 3: Generate tokens
         user_id = row[0]
-        access_token = create_access_token({"sub": str(user_id), "email": row[1]})
-        refresh_token = create_refresh_token({"sub": str(user_id)})
+        try:
+            access_token = create_access_token({"sub": str(user_id), "email": row[1]})
+            refresh_token = create_refresh_token({"sub": str(user_id)})
+        except Exception as exc:
+            logger.error("Token generation error for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Login failed: could not generate authentication tokens. Please try again."
+            )
         
         logger.info("Login successful for user %s (ID: %s)", email, user_id)
 

@@ -1,6 +1,7 @@
 // API Configuration and Client
-// Change this to your Render backend URL after deployment
-const API_BASE = 'https://smart-kitchen-api.onrender.com';
+// For local development, use: 'http://localhost:8000
+// For production (Cloud Run), use: 'https://backend-309488529038.asia-south1.run.app'
+const API_BASE = 'https://backend-309488529038.asia-south1.run.app';
 
 class ApiClient {
     constructor() {
@@ -65,6 +66,12 @@ class ApiClient {
             ...options.headers,
         };
 
+        // Fallback: re-read token from localStorage if in-memory token is missing
+        if (!this.token) {
+            this.token = localStorage.getItem('access_token');
+            this.refreshToken = localStorage.getItem('refresh_token');
+        }
+
         if (this.token) {
             headers['Authorization'] = `Bearer ${this.token}`;
         }
@@ -95,6 +102,15 @@ class ApiClient {
             return response;
         } catch (error) {
             console.error('API request failed:', error);
+            // Check if it's a network error (server unreachable)
+            if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                console.error('Network error: Backend server may be unreachable at', API_BASE);
+                // Return a synthetic response so the caller can handle it gracefully
+                return new Response(
+                    JSON.stringify({ detail: 'Unable to reach the server. Please check your internet connection and try again.' }),
+                    { status: 503, headers: { 'Content-Type': 'application/json' } }
+                );
+            }
             throw error;
         }
     }
