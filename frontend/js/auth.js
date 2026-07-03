@@ -81,8 +81,23 @@ async function handleRegister(event) {
             enterApp(data);
         } else {
             const message = api.getErrorMessage(data, 'Registration failed');
-            showFormMessage('register-error', message);
-            showToast(message, 'error');
+            console.error('Registration failed:', message);
+            
+            // Provide more descriptive messages based on HTTP status code
+            let displayMessage = message;
+            if (response.status === 500) {
+                displayMessage = 'Server error. Please try again in a few moments.';
+            } else if (response.status === 503) {
+                displayMessage = message; // Use the specific message from backend (DB unavailable)
+            } else if (response.status === 409) {
+                // Use the specific error message from backend (email vs phone)
+                displayMessage = message;
+            } else if (response.status === 422) {
+                displayMessage = message; // Use the specific validation error from backend
+            }
+            
+            showFormMessage('register-error', displayMessage);
+            showToast(displayMessage, 'error');
         }
     } catch (error) {
         console.error('Registration error:', error);

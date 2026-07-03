@@ -1,6 +1,11 @@
 // Profile functions
 
 async function loadProfile() {
+    if (!api.isAuthenticated()) {
+        console.warn('Profile load skipped: no auth token available');
+        return;
+    }
+
     try {
         const response = await api.getProfile();
         if (!response.ok) {

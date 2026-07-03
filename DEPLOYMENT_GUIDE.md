@@ -2,6 +2,10 @@
 # Smart Kitchen - Google Cloud Run Deployment Guide
 # ============================================================
 
+## Last Updated
+- Fixed CORS configuration for Firebase hosting
+- Added device_readings table to database schema
+
 ## Prerequisites
 - Google Cloud SDK installed and configured
 - Project ID: smart-kitchen-309488529038 (or your actual project ID)

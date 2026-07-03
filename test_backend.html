@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Connection Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Backend Connection Test</h1>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Connection Status</h2>
+            <div id="status" class="mb-4 p-4 rounded-lg bg-yellow-50 border-l-4 border-yellow-500 text-yellow-700">
+                Testing connection...
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-4">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Test Results</h2>
+            <div id="results" class="space-y-2 text-sm font-mono">
+                <div class="text-gray-600">Running tests...</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Quick Actions</h2>
+            <div class="space-y-2">
+                <button onclick="testHealth()" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+                    Test Health Endpoint
+                </button>
+                <button onclick="testLogin()" class="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition">
+                    Test Login Endpoint
+                </button>
+                <button onclick="clearResults()" class="w-full bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700 transition">
+                    Clear Results
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 class="font-semibold text-blue-900 mb-2">Troubleshooting Tips:</h3>
+            <ul class="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                <li>Make sure backend is running on http://localhost:8000</li>
+                <li>Check browser console (F12) for detailed errors</li>
+                <li>Verify CORS is enabled in backend</li>
+                <li>Ensure database connection is working</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        const resultsDiv = document.getElementById('results');
+        const statusDiv = document.getElementById('status');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                info: 'text-gray-600',
+                success: 'text-green-600',
+                error: 'text-red-600',
+                warning: 'text-yellow-600'
+            };
+            resultsDiv.innerHTML += `<div class="${colors[type]}">[${timestamp}] ${message}</div>`;
+        }
+
+        function clearResults() {
+            resultsDiv.innerHTML = '<div class="text-gray-600">Results cleared. Run a test...</div>';
+            statusDiv.className = 'mb-4 p-4 rounded-lg bg-yellow-50 border-l-4 border-yellow-500 text-yellow-700';
+            statusDiv.textContent = 'Ready to test';
+        }
+
+        function updateStatus(message, type) {
+            const classes = {
+                success: 'bg-green-50 border-green-500 text-green-700',
+                error: 'bg-red-50 border-red-500 text-red-700',
+                warning: 'bg-yellow-50 border-yellow-500 text-yellow-700',
+                info: 'bg-blue-50 border-blue-500 text-blue-700'
+            };
+            statusDiv.className = `mb-4 p-4 rounded-lg border-l-4 ${classes[type]}`;
+            statusDiv.textContent = message;
+        }
+
+        async function testHealth() {
+            clearResults();
+            log('Testing health endpoint...', 'info');
+            
+            try {
+                const start = Date.now();
+                const response = await fetch(`${API_BASE}/health`);
+                const duration = Date.now() - start;
+                const data = await response.json();
+                
+                log(`Health check completed in ${duration}ms`, 'success');
+                log(`Status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+                log(`Response: ${JSON.stringify(data, null, 2)}`, 'info');
+                
+                if (response.ok) {
+                    updateStatus('✓ Backend is running and healthy!', 'success');
+                } else {
+                    updateStatus('✗ Backend returned error', 'error');
+                }
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                log('Make sure the backend is running on http://localhost:8000', 'warning');
+                updateStatus('✗ Cannot connect to backend', 'error');
+            }
+        }
+
+        async function testLogin() {
+            clearResults();
+            log('Testing login endpoint...', 'info');
+            
+            try {
+                const start = Date.now();
+                const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'test@example.com',
+                        password: 'testpass123'
+                    })
+                });
+                const duration = Date.now() - start;
+                const data = await response.json();
+                
+                log(`Login request completed in ${duration}ms`, 'success');
+                log(`Status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+                log(`Response: ${JSON.stringify(data, null, 2)}`, 'info');
+                
+                if (response.status === 401) {
+                    updateStatus('✓ Login endpoint reachable (invalid credentials expected)', 'success');
+                    log('This is expected - test credentials are invalid', 'warning');
+                } else if (response.ok) {
+                    updateStatus('✓ Login successful!', 'success');
+                } else {
+                    updateStatus('✗ Login endpoint returned error', 'error');
+                }
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                log('Check if backend is running and CORS is configured', 'warning');
+                updateStatus('✗ Cannot reach login endpoint', 'error');
+            }
+        }
+
+        // Auto-test on page load
+        window.addEventListener('load', () => {
+            log('Page loaded, starting connection tests...', 'info');
+            setTimeout(testHealth, 500);
+        });
+    </script>
+</body>
+</html>

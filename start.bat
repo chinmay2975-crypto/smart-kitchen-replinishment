@@ -1,53 +1,60 @@
 @echo off
-echo ============================================
-echo  Smart Kitchen Replenishment System
-echo ============================================
+echo ========================================
+echo Smart Kitchen - Starting Application
+echo ========================================
 echo.
 
-:: Check if Docker is running
-docker ps >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [WARNING] Docker is not running.
-    echo Please start Docker Desktop manually first.
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [1/4] Starting PostgreSQL database...
-docker compose up -d
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Failed to start database.
-    pause
-    exit /b 1
-)
-echo Database started successfully.
-echo.
-
-:: Wait for database to be ready
-echo [2/4] Waiting for database to be ready...
-:waitloop
-docker exec smart-kitchen-db pg_isready -U kitchen_admin -d smart_kitchen >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+REM Check if backend is already running
+netstat -ano | findstr ":8000.*LISTENING" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo Backend is already running on port 8000
+) else (
+    echo Starting backend server...
+    
+    REM Start backend in a new window
+    start "Smart Kitchen Backend" cmd /c "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+    
+    REM Wait for backend to start
+    echo Waiting for backend to start...
     timeout /t 3 /nobreak >nul
-    goto waitloop
+    
+    REM Check if backend started successfully
+    netstat -ano | findstr ":8000.*LISTENING" >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo Backend started successfully!
+    ) else (
+        echo Warning: Backend may not have started properly
+    )
 )
-echo Database is ready.
+
+echo.
+echo ========================================
+echo Opening Frontend...
+echo ========================================
 echo.
 
-echo [3/4] Installing Python dependencies...
-pip install -r requirements.txt >nul 2>&1
-echo Dependencies installed.
+REM Open frontend with Live Server or default browser
+REM Try to use Live Server if available, otherwise open directly
+where code >nul 2>&1
+if %errorlevel% equ 0 (
+    echo Opening with VS Code Live Server...
+    code frontend/index.html
+) else (
+    echo Opening in default browser...
+    start frontend/index.html
+)
+
+echo.
+echo ========================================
+echo Application Started!
+echo ========================================
+echo Backend API: http://localhost:8000
+echo API Docs: http://localhost:8000/docs
+echo Health Check: http://localhost:8000/health
+echo.
+echo Close this window or press Ctrl+C to stop
+echo ========================================
 echo.
 
-echo [4/4] Starting FastAPI backend server...
-echo.
-echo ============================================
-echo  Backend API: http://127.0.0.1:8000
-echo  Frontend:    Open frontend/index.html in browser
-echo  API Docs:    http://127.0.0.1:8000/docs
-echo ============================================
-echo.
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
+REM Keep the window open
 pause

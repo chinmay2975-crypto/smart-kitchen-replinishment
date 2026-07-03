@@ -15,6 +15,7 @@ from sqlalchemy import (
     CheckConstraint,
     JSON,
     BigInteger,
+    Index,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -208,3 +209,24 @@ class SensorReading(Base):
     unit = mapped_column(Text, nullable=False)
     metadata_json = mapped_column(JSONB, default={})
     recorded_at = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class DeviceReading(Base):
+    __tablename__ = "device_readings"
+
+    reading_id = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = mapped_column(UUID(as_uuid=True), ForeignKey("app_users.user_id", ondelete="CASCADE"), nullable=False)
+    device_id = mapped_column(UUID(as_uuid=True), ForeignKey("devices.device_id", ondelete="SET NULL"), nullable=True)
+    feed_id = mapped_column(String(50), nullable=True)
+    reading_value = mapped_column(Numeric(10, 2), nullable=False)
+    unit = mapped_column(String(20), default="gram")
+    latitude = mapped_column(Numeric(9, 6), nullable=True)
+    longitude = mapped_column(Numeric(9, 6), nullable=True)
+    elevation = mapped_column(Numeric(8, 2), nullable=True)
+    external_id = mapped_column(String(50), nullable=True)
+    metadata_json = mapped_column(JSONB, default={})
+    created_at = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index('idx_device_readings_user_created', 'user_id', 'created_at'),
+    )

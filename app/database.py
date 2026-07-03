@@ -20,12 +20,17 @@ if database_url and database_url.startswith("postgresql://"):
 
 # For Supabase, SSL is required. The connection string already has ?ssl=require
 # appended in the .env / config defaults.
+# Disable prepared statement cache to avoid "prepared statement does not exist" errors
+# in serverless environments like Cloud Run
 engine = create_async_engine(
     database_url,
     pool_size=5,
     max_overflow=10,
     echo=False,
-    connect_args={"ssl": "require"} if "supabase" in database_url else {},
+    connect_args={
+        "ssl": "require",
+        "prepared_statement_cache_size": 0
+    } if "supabase" in database_url else {"prepared_statement_cache_size": 0},
 )
 
 async_session_factory = async_sessionmaker(

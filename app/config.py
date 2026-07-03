@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+asyncpg://postgres:Chinmay2005%@db.eqjianefzeaighbjegye.supabase.co:6543/postgres?ssl=require"
+    database_url: str = "postgresql+asyncpg://postgres.eqjianefzeaighbjegye:Chinmay2005%40@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?ssl=require"
     supabase_url: str = "https://eqjianefzeaighbjegye.supabase.co"
     evaluation_interval_seconds: int = 30
     telemetry_interval_seconds: int = 10

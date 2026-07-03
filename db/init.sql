@@ -149,7 +149,25 @@ CREATE TABLE order_line_items (
     supplier_sku   VARCHAR(100)
 );
 
--- 1.9 Supplier Registry
+-- 1.9 Device Readings (for demo data and manual readings)
+CREATE TABLE device_readings (
+    reading_id     BIGSERIAL PRIMARY KEY,
+    user_id        UUID NOT NULL REFERENCES app_users(user_id) ON DELETE CASCADE,
+    device_id      UUID REFERENCES devices(device_id) ON DELETE SET NULL,
+    feed_id        VARCHAR(50),
+    reading_value  NUMERIC(10,2) NOT NULL,
+    unit           VARCHAR(20) DEFAULT 'gram',
+    latitude       NUMERIC(9,6),
+    longitude      NUMERIC(9,6),
+    elevation      NUMERIC(8,2),
+    external_id    VARCHAR(50),
+    metadata_json  JSONB DEFAULT '{}',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_device_readings_user_created ON device_readings(user_id, created_at);
+
+-- 1.10 Supplier Registry
 CREATE TABLE suppliers (
     supplier_id    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     supplier_name  VARCHAR(200) NOT NULL,

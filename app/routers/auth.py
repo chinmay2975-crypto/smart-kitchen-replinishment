@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ValidationError as PydanticValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -106,6 +106,20 @@ async def verify_otp(req: VerifyOtpRequest):
     return {"status": "success", "message": "OTP verified successfully"}
 
 
+def normalize_phone(phone: str) -> str:
+    """Normalize phone number to international format with + prefix."""
+    # Remove all non-digit characters
+    digits = ''.join(filter(str.isdigit, phone))
+    # If it starts with 91 and has 12 digits, it's already in international format
+    if digits.startswith('91') and len(digits) == 12:
+        return f"+{digits}"
+    # If it has 10 digits, assume it's an Indian number and add +91
+    if len(digits) == 10:
+        return f"+91{digits}"
+    # Otherwise, just add + prefix
+    return f"+{digits}"
+
+
 @router.post("/register", response_model=AuthResponse)
 async def register(request: Request, db: AsyncSession = Depends(get_db)):
     """Register a new user. Creates user + household + preferences."""
@@ -120,10 +134,12 @@ async def register(request: Request, db: AsyncSession = Depends(get_db)):
     # Validate the request manually to get better error messages
     try:
         req = RegisterRequest(**body)
-    except RequestValidationError as e:
+    except (RequestValidationError, PydanticValidationError) as e:
         logger.error("Validation error: %s", e.errors())
         # Extract the first error message
-        errors = e.errors()
+        errors = e.errors() if hasattr(e, 'errors') else []
+        if not errors:
+            errors = [{"loc": ("body",), "msg": str(e)}]
         if errors:
             error = errors[0]
             field = error.get('loc', ['unknown'])[0] if error.get('loc') else 'unknown'
@@ -136,97 +152,163 @@ async def register(request: Request, db: AsyncSession = Depends(get_db)):
     try:
         email = req.email.strip().lower()
         name = req.name.strip()
-        phone = req.phone.strip()
+        phone = normalize_phone(req.phone.strip())
 
-        # Check if email already exists
-        existing = await db.execute(
-            text("SELECT user_id FROM app_users WHERE email = :email"),
-            {"email": email},
-        )
+        # Step 1: Check if email already exists
+        try:
+            existing = await db.execute(
+                text("SELECT user_id FROM app_users WHERE LOWER(email) = :email"),
+                {"email": email},
+            )
+        except Exception as exc:
+            logger.error("Registration DB query error (email check) for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=503,
+                detail="Registration failed: database is temporarily unavailable. Please try again."
+            )
         if existing.first():
             logger.warning("Registration failed: email %s already exists", email)
             raise HTTPException(status_code=409, detail="Email already registered")
 
-        # Check if phone already exists
-        existing_phone = await db.execute(
-            text("SELECT user_id FROM app_users WHERE phone = :phone"),
-            {"phone": phone},
-        )
+        # Step 2: Check if phone already exists
+        try:
+            existing_phone = await db.execute(
+                text("SELECT user_id FROM app_users WHERE phone = :phone"),
+                {"phone": phone},
+            )
+        except Exception as exc:
+            logger.error("Registration DB query error (phone check) for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=503,
+                detail="Registration failed: database is temporarily unavailable. Please try again."
+            )
         if existing_phone.first():
             logger.warning("Registration failed: phone %s already exists", phone)
             raise HTTPException(status_code=409, detail="Phone number already registered")
 
+        # Step 3: Generate IDs and hash password
         user_id = uuid.uuid4()
         household_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
-        password_hash = get_password_hash(req.password)
+        try:
+            password_hash = get_password_hash(req.password)
+        except Exception as exc:
+            logger.error("Password hashing error for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Registration failed: could not process password. Please try again."
+            )
 
-        # Create user
-        logger.info("Creating user %s with household %s", user_id, household_id)
-        await db.execute(
-            text("""
-                INSERT INTO app_users (user_id, email, password_hash, full_name, phone, role, is_active, created_at, updated_at)
-                VALUES (:uid, :email, :pwd, :name, :phone, 'homeowner', TRUE, :now, :now)
-            """),
-            {
-                "uid": user_id,
-                "email": email,
-                "pwd": password_hash,
-                "name": name,
-                "phone": phone,
-                "now": now,
-            },
-        )
+        # Step 4: Create user
+        try:
+            logger.info("Creating user %s with household %s", user_id, household_id)
+            await db.execute(
+                text("""
+                    INSERT INTO app_users (user_id, email, password_hash, full_name, phone, role, is_active, created_at, updated_at)
+                    VALUES (:uid, :email, :pwd, :name, :phone, 'homeowner', TRUE, :now, :now)
+                """),
+                {
+                    "uid": user_id,
+                    "email": email,
+                    "pwd": password_hash,
+                    "name": name,
+                    "phone": phone,
+                    "now": now,
+                },
+            )
+        except IntegrityError as exc:
+            await db.rollback()
+            error_msg = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
+            logger.warning("Registration integrity error for %s: %s", email, error_msg)
+            if 'email' in error_msg.lower():
+                raise HTTPException(status_code=409, detail="Email already registered")
+            elif 'phone' in error_msg.lower():
+                raise HTTPException(status_code=409, detail="Phone number already registered")
+            else:
+                raise HTTPException(status_code=409, detail="Email or phone number already registered")
+        except Exception as exc:
+            await db.rollback()
+            logger.error("Registration user insert error for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Registration failed: could not create user account. Please try again."
+            )
 
-        # Create household
-        await db.execute(
-            text("""
-                INSERT INTO households (household_id, name, owner_id, created_at)
-                VALUES (:hid, :hname, :uid, :now)
-            """),
-            {
-                "hid": household_id,
-                "hname": f"{name}'s Kitchen",
-                "uid": user_id,
-                "now": now,
-            },
-        )
+        # Step 5: Create household
+        try:
+            await db.execute(
+                text("""
+                    INSERT INTO households (household_id, name, owner_id, created_at)
+                    VALUES (:hid, :hname, :uid, :now)
+                """),
+                {
+                    "hid": household_id,
+                    "hname": f"{name}'s Kitchen",
+                    "uid": user_id,
+                    "now": now,
+                },
+            )
+        except Exception as exc:
+            await db.rollback()
+            logger.error("Registration household insert error for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Registration failed: could not create household. Please try again."
+            )
 
-        # Add as household member
-        await db.execute(
-            text("""
-                INSERT INTO household_members (household_id, user_id, role, joined_at)
-                VALUES (:hid, :uid, 'owner', :now)
-            """),
-            {"hid": household_id, "uid": user_id, "now": now},
-        )
+        # Step 6: Add as household member
+        try:
+            await db.execute(
+                text("""
+                    INSERT INTO household_members (household_id, user_id, role, joined_at)
+                    VALUES (:hid, :uid, 'owner', :now)
+                """),
+                {"hid": household_id, "uid": user_id, "now": now},
+            )
+        except Exception as exc:
+            await db.rollback()
+            logger.error("Registration member insert error for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Registration failed: could not set up household membership. Please try again."
+            )
 
-        # Create default preferences
-        await db.execute(
-            text("""
-                INSERT INTO household_preferences (household_id, user_id, auto_replenish, notify_low_stock, notify_expiry)
-                VALUES (:hid, :uid, TRUE, TRUE, TRUE)
-            """),
-            {"hid": household_id, "uid": user_id},
-        )
+        # Step 7: Create default preferences
+        try:
+            await db.execute(
+                text("""
+                    INSERT INTO household_preferences (household_id, user_id, auto_replenish, notify_low_stock, notify_expiry)
+                    VALUES (:hid, :uid, TRUE, TRUE, TRUE)
+                """),
+                {"hid": household_id, "uid": user_id},
+            )
+        except Exception as exc:
+            await db.rollback()
+            logger.error("Registration preferences insert error for %s: %s", email, exc, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Registration failed: could not set up preferences. Please try again."
+            )
 
         await db.commit()
         logger.info("Successfully registered user %s with household %s", email, household_id)
-    except IntegrityError as exc:
-        await db.rollback()
-        logger.error("Registration integrity error for %s: %s", email, exc, exc_info=True)
-        raise HTTPException(status_code=409, detail="Email or phone number already registered")
-    except SQLAlchemyError as exc:
-        await db.rollback()
-        logger.error("Registration database error for %s: %s", email, exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Registration failed due to a database error")
+    except HTTPException:
+        raise
     except Exception as exc:
         await db.rollback()
         logger.error("Registration unexpected error for %s: %s", email, exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Registration failed due to an unexpected error")
 
-    access_token = create_access_token({"sub": str(user_id), "email": email})
-    refresh_token = create_refresh_token({"sub": str(user_id)})
+    # Step 8: Generate tokens
+    try:
+        access_token = create_access_token({"sub": str(user_id), "email": email})
+        refresh_token = create_refresh_token({"sub": str(user_id)})
+    except Exception as exc:
+        logger.error("Token generation error for %s: %s", email, exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Registration failed: could not generate authentication tokens. Please try again."
+        )
 
     return AuthResponse(
         user_id=str(user_id),

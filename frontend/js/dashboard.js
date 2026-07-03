@@ -2,6 +2,11 @@
 let dashboardRefreshInterval = null;
 
 async function loadDashboard() {
+    if (!api.isAuthenticated()) {
+        console.warn('Dashboard load skipped: no auth token available');
+        return;
+    }
+
     try {
         const response = await api.getDashboardData();
         if (!response.ok) {
