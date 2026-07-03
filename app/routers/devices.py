@@ -1,7 +1,8 @@
 import logging
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -155,32 +156,7 @@ async def claim_device(
     user_id: str = Depends(get_user_id_from_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """Claim a device by its UID/MAC address and assign it to the user's household."""
-    # Find the device by UID (mqtt_topic or device_name match)
-    result = await db.execute(
-        text("""
-            SELECT device_id, device_name, device_type, is_online, last_seen_at, mqtt_topic
-            FROM devices
-            WHERE (mqtt_topic = :uid OR device_name = :uid)
-              AND deactivated_at IS NULL
-            LIMIT 1
-        """),
-        {"uid": req.device_uid},
-    )
-    row = result.first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Device not found. Check the UID.")
-
-    device_id = row[0]
-
-    # Check if device is already claimed by another household
-    check_claimed = await db.execute(
-        text("SELECT household_id FROM devices WHERE device_id = :did AND household_id IS NOT NULL"),
-        {"did": device_id},
-    )
-    if check_claimed.first():
-        raise HTTPException(status_code=409, detail="Device already claimed by another household")
-
+    """Create and claim a new device for the user's household."""
     # Get user's household
     household_result = await db.execute(
         text("""
@@ -197,20 +173,25 @@ async def claim_device(
 
     household_id = household_row[0]
 
-    # Assign device to household
+    # Generate unique MQTT topic based on device name
+    base_topic = f"kitchen/{req.device_name.lower().replace(' ', '_')}"
+    mqtt_topic = f"{base_topic}_{uuid.uuid4().hex[:8]}"
+
+    # Create new device
+    device_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
     await db.execute(
         text("""
-            UPDATE devices
-            SET household_id = :hid, is_online = TRUE, last_seen_at = :now,
-                device_name = :dname
-            WHERE device_id = :did
+            INSERT INTO devices (device_id, household_id, device_name, device_type, 
+                               mqtt_topic, is_online, last_seen_at, registered_at)
+            VALUES (:did, :hid, :dname, 'smart_scale', :topic, TRUE, :now, :now)
         """),
         {
-            "hid": household_id,
-            "now": now,
-            "dname": req.device_name,
             "did": device_id,
+            "hid": household_id,
+            "dname": req.device_name,
+            "topic": mqtt_topic,
+            "now": now,
         },
     )
     await db.commit()
@@ -218,8 +199,78 @@ async def claim_device(
     return DeviceInfoResponse(
         device_id=str(device_id),
         device_name=req.device_name,
-        device_type=row[2],
+        device_type="smart_scale",
         is_online=True,
         last_seen_at=str(now),
-        mqtt_topic=row[5],
+        mqtt_topic=mqtt_topic,
     )
+
+
+@router.get("/{device_id}/telemetry")
+async def get_device_telemetry(
+    device_id: str,
+    user_id: str = Depends(get_user_id_from_token),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=500),
+):
+    """Get recent telemetry data for a device."""
+    # Verify device belongs to user's household
+    device_check = await db.execute(
+        text("""
+            SELECT d.device_id FROM devices d
+            JOIN households h ON d.household_id = h.household_id
+            JOIN household_members hm ON hm.household_id = h.household_id
+            WHERE d.device_id = :did AND hm.user_id = :uid AND d.deactivated_at IS NULL
+        """),
+        {"did": device_id, "uid": user_id},
+    )
+    if not device_check.first():
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    # Get recent sensor readings
+    result = await db.execute(
+        text("""
+            SELECT sensor_type, value, unit, recorded_at
+            FROM sensor_readings
+            WHERE device_id = :did
+            ORDER BY recorded_at DESC
+            LIMIT :limit
+        """),
+        {"did": device_id, "limit": limit},
+    )
+    rows = result.fetchall()
+
+    telemetry = [
+        {
+            "sensor_type": row[0],
+            "value": float(row[1]),
+            "unit": row[2],
+            "recorded_at": str(row[3]),
+        }
+        for row in rows
+    ]
+
+    # Calculate summary statistics
+    if telemetry:
+        values = [t["value"] for t in telemetry]
+        summary = {
+            "count": len(values),
+            "min": min(values),
+            "max": max(values),
+            "avg": sum(values) / len(values),
+            "latest": values[0],
+        }
+    else:
+        summary = {
+            "count": 0,
+            "min": None,
+            "max": None,
+            "avg": None,
+            "latest": None,
+        }
+
+    return {
+        "device_id": device_id,
+        "telemetry": telemetry,
+        "summary": summary,
+    }

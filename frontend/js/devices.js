@@ -1,6 +1,11 @@
 // Devices functions
 
 async function loadDevices() {
+    if (!api.isAuthenticated()) {
+        console.warn('Devices load skipped: no auth token available');
+        return;
+    }
+
     try {
         const response = await api.getDevices();
         if (!response.ok) {
@@ -116,19 +121,21 @@ async function showDeviceDetail(deviceId) {
         }
         const device = await response.json();
 
-        // Create a modal-like detail view
-        const telemetryHtml = device.latest_telemetry && device.latest_telemetry.length > 0
-            ? device.latest_telemetry.map(t => `
-                <div class="flex justify-between py-2 border-b border-gray-100">
-                    <span class="text-gray-600">${t.sensor_type}</span>
-                    <span class="font-medium">${t.value} ${t.unit}</span>
-                </div>
-            `).join('')
-            : '<p class="text-gray-400 text-sm">No telemetry data yet</p>';
+        // Fetch telemetry data
+        const telemetryResponse = await api.getDeviceTelemetry(deviceId, 50);
+        let telemetryData = [];
+        let summary = null;
+        
+        if (telemetryResponse.ok) {
+            const telemetryResult = await telemetryResponse.json();
+            telemetryData = telemetryResult.telemetry || [];
+            summary = telemetryResult.summary;
+        }
 
+        // Create a modal-like detail view with chart
         const detailHtml = `
             <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="event.target === this && closeDetail()">
-                <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+                <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
                     <div class="p-6">
                         <div class="flex justify-between items-start mb-4">
                             <div>
@@ -162,8 +169,46 @@ async function showDeviceDetail(deviceId) {
                             </div>
                         </div>
 
-                        <h4 class="font-semibold text-gray-700 mb-2">Recent Telemetry</h4>
-                        <div class="mb-4">${telemetryHtml}</div>
+                        ${summary ? `
+                        <div class="grid grid-cols-5 gap-3 mb-4">
+                            <div class="bg-blue-50 p-3 rounded-lg text-center">
+                                <div class="text-xs text-gray-500">Readings</div>
+                                <div class="text-lg font-bold text-blue-600">${summary.count}</div>
+                            </div>
+                            <div class="bg-green-50 p-3 rounded-lg text-center">
+                                <div class="text-xs text-gray-500">Latest</div>
+                                <div class="text-lg font-bold text-green-600">${summary.latest?.toFixed(1) || 'N/A'}</div>
+                            </div>
+                            <div class="bg-yellow-50 p-3 rounded-lg text-center">
+                                <div class="text-xs text-gray-500">Average</div>
+                                <div class="text-lg font-bold text-yellow-600">${summary.avg?.toFixed(1) || 'N/A'}</div>
+                            </div>
+                            <div class="bg-purple-50 p-3 rounded-lg text-center">
+                                <div class="text-xs text-gray-500">Min</div>
+                                <div class="text-lg font-bold text-purple-600">${summary.min?.toFixed(1) || 'N/A'}</div>
+                            </div>
+                            <div class="bg-red-50 p-3 rounded-lg text-center">
+                                <div class="text-xs text-gray-500">Max</div>
+                                <div class="text-lg font-bold text-red-600">${summary.max?.toFixed(1) || 'N/A'}</div>
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        <h4 class="font-semibold text-gray-700 mb-2">Weight Telemetry Over Time</h4>
+                        <div class="mb-4 bg-white border border-gray-200 rounded-lg p-4">
+                            <canvas id="telemetry-chart" height="80"></canvas>
+                        </div>
+
+                        <h4 class="font-semibold text-gray-700 mb-2">Recent Readings</h4>
+                        <div class="mb-4 max-h-48 overflow-y-auto">
+                            ${telemetryData.length > 0 ? telemetryData.slice(0, 10).map(t => `
+                                <div class="flex justify-between py-2 border-b border-gray-100 text-sm">
+                                    <span class="text-gray-600">${t.sensor_type}</span>
+                                    <span class="font-medium">${t.value.toFixed(2)} ${t.unit}</span>
+                                    <span class="text-gray-400 text-xs">${new Date(t.recorded_at).toLocaleTimeString()}</span>
+                                </div>
+                            `).join('') : '<p class="text-gray-400 text-sm">No telemetry data yet. Data will appear as the device receives readings.</p>'}
+                        </div>
 
                         <button onclick="closeDetail()" class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-200 transition">
                             Close
@@ -177,9 +222,74 @@ async function showDeviceDetail(deviceId) {
         detailEl.id = 'device-detail-modal';
         detailEl.innerHTML = detailHtml;
         document.body.appendChild(detailEl);
+
+        // Render chart if telemetry data exists
+        if (telemetryData.length > 0) {
+            renderTelemetryChart(telemetryData);
+        }
     } catch (error) {
         showToast('Failed to load device details', 'error');
     }
+}
+
+function renderTelemetryChart(telemetryData) {
+    const ctx = document.getElementById('telemetry-chart');
+    if (!ctx) return;
+
+    // Reverse data to show chronological order (oldest to newest)
+    const reversedData = [...telemetryData].reverse();
+    
+    const labels = reversedData.map(t => new Date(t.recorded_at).toLocaleTimeString());
+    const values = reversedData.map(t => t.value);
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Weight (grams)',
+                data: values,
+                borderColor: 'rgb(16, 185, 129)',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                tension: 0.4,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.parsed.y.toFixed(2) + ' grams';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        callback: function(value) {
+                            return value + 'g';
+                        }
+                    }
+                },
+                x: {
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                }
+            }
+        }
+    });
 }
 
 function closeDetail() {

@@ -4,6 +4,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Kitchen - Automated Replenishment</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -33,7 +34,7 @@
                         <p class="text-gray-500">Sign in to your account</p>
                     </div>
                     <form id="login-form" onsubmit="handleLogin(event)">
-                        <div id="login-error" class="hidden"></div>
+                        <div id="login-error" class="hidden mb-4 p-4 rounded-lg border-l-4 bg-red-50 border-red-500 text-red-700 font-medium"></div>
                         <div class="mb-4">
                             <label class="block text-gray-700 text-sm font-medium mb-2">Email</label>
                             <input type="email" id="login-email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
@@ -63,7 +64,7 @@
                         <p class="text-gray-500">Join Smart Kitchen today</p>
                     </div>
                     <form id="register-form" onsubmit="handleRegister(event)">
-                        <div id="register-error" class="hidden"></div>
+                        <div id="register-error" class="hidden mb-4 p-4 rounded-lg border-l-4 bg-red-50 border-red-500 text-red-700 font-medium"></div>
                         <div class="mb-3">
                             <label class="block text-gray-700 text-sm font-medium mb-2">Full Name</label>
                             <input type="text" id="reg-name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">

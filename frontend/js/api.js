@@ -177,6 +177,11 @@ class ApiClient {
         return response;
     }
 
+    async getDeviceTelemetry(deviceId, limit = 50) {
+        const response = await this.request(`/api/v1/devices/${deviceId}/telemetry?limit=${limit}`);
+        return response;
+    }
+
     // Profile
     async getProfile() {
         const response = await this.request('/api/v1/profile');
