@@ -299,53 +299,18 @@ async function generateDemoData(deviceId) {
     try {
         showToast('Generating demo data...', 'info');
         
-        // Generate 20 sample weight readings over the last 2 hours
-        const now = new Date();
-        const readings = [];
+        // Use the new demo generation endpoint
+        const response = await api.generateDemoData();
+        const data = await response.json();
         
-        for (let i = 20; i >= 0; i--) {
-            const timestamp = new Date(now.getTime() - i * 6 * 60 * 1000); // Every 6 minutes
-            const baseWeight = 500; // Base weight in grams
-            const variation = Math.random() * 100 - 50; // ±50 grams variation
-            const weight = baseWeight + variation;
-            
-            readings.push({
-                device_id: deviceId,
-                reading_value: weight,
-                unit: 'gram',
-                created_at: timestamp.toISOString(),
-                metadata: {
-                    demo_data: true,
-                    sensor_type: 'weight'
-                }
-            });
-        }
-        
-        // Send readings to the API one by one
-        let successCount = 0;
-        let lastResponse = null;
-        for (const reading of readings) {
-            const response = await api.request('/api/v1/device/reading', {
-                method: 'POST',
-                body: JSON.stringify(reading)
-            });
-            lastResponse = response;
-            if (response.ok) {
-                successCount++;
-            }
-        }
-        
-        const totalReadings = readings.length;
-        
-        if (successCount > 0) {
-            showToast(`Demo data generated successfully! (${successCount}/${totalReadings} readings)`, 'success');
+        if (response.ok) {
+            showToast(data.message, 'success');
             // Refresh the device detail view after 1 second
             setTimeout(() => {
                 closeDetail();
                 showDeviceDetail(deviceId);
             }, 1000);
         } else {
-            const data = lastResponse ? await lastResponse.json() : { detail: 'Failed to generate demo data' };
             showToast(data.detail || 'Failed to generate demo data', 'error');
         }
     } catch (error) {
