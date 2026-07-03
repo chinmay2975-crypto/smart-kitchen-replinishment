@@ -210,6 +210,9 @@ async function showDeviceDetail(deviceId) {
                             `).join('') : '<p class="text-gray-400 text-sm">No telemetry data yet. Data will appear as the device receives readings.</p>'}
                         </div>
 
+                        <button onclick="generateDemoData('${device.device_id}')" class="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition mb-2">
+                            <i class="fas fa-magic mr-1"></i>Generate Demo Data
+                        </button>
                         <button onclick="closeDetail()" class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-200 transition">
                             Close
                         </button>
@@ -290,6 +293,65 @@ function renderTelemetryChart(telemetryData) {
             }
         }
     });
+}
+
+async function generateDemoData(deviceId) {
+    try {
+        showToast('Generating demo data...', 'info');
+        
+        // Generate 20 sample weight readings over the last 2 hours
+        const now = new Date();
+        const readings = [];
+        
+        for (let i = 20; i >= 0; i--) {
+            const timestamp = new Date(now.getTime() - i * 6 * 60 * 1000); // Every 6 minutes
+            const baseWeight = 500; // Base weight in grams
+            const variation = Math.random() * 100 - 50; // ±50 grams variation
+            const weight = baseWeight + variation;
+            
+            readings.push({
+                device_id: deviceId,
+                reading_value: weight,
+                unit: 'gram',
+                created_at: timestamp.toISOString(),
+                metadata: {
+                    demo_data: true,
+                    sensor_type: 'weight'
+                }
+            });
+        }
+        
+        // Send readings to the API one by one
+        let successCount = 0;
+        let lastResponse = null;
+        for (const reading of readings) {
+            const response = await api.request('/api/v1/device/reading', {
+                method: 'POST',
+                body: JSON.stringify(reading)
+            });
+            lastResponse = response;
+            if (response.ok) {
+                successCount++;
+            }
+        }
+        
+        const totalReadings = readings.length;
+        
+        if (successCount > 0) {
+            showToast(`Demo data generated successfully! (${successCount}/${totalReadings} readings)`, 'success');
+            // Refresh the device detail view after 1 second
+            setTimeout(() => {
+                closeDetail();
+                showDeviceDetail(deviceId);
+            }, 1000);
+        } else {
+            const data = lastResponse ? await lastResponse.json() : { detail: 'Failed to generate demo data' };
+            showToast(data.detail || 'Failed to generate demo data', 'error');
+        }
+    } catch (error) {
+        console.error('Error generating demo data:', error);
+        showToast('Failed to generate demo data', 'error');
+    }
 }
 
 function closeDetail() {
