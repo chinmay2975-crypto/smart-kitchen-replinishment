@@ -1,4 +1,6 @@
 import logging
+import random
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -204,4 +206,173 @@ async def get_dashboard_data(
     return {
         "inventory": inventory_list,
         "recent_orders": orders_list,
+    }
+
+
+@router.post("/demo/generate")
+async def generate_demo_data(
+    user_id: str = Depends(get_user_id_from_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate demo data for the authenticated user.
+    Creates sample devices, products, and inventory items.
+    """
+    now = datetime.now(timezone.utc)
+    
+    # Get user's household
+    household_result = await db.execute(
+        text("""
+            SELECT h.household_id FROM households h
+            JOIN household_members hm ON hm.household_id = h.household_id
+            WHERE hm.user_id = :uid AND hm.role = 'owner'
+            LIMIT 1
+        """),
+        {"uid": user_id},
+    )
+    household_row = household_result.first()
+    if not household_row:
+        raise HTTPException(status_code=400, detail="User has no household")
+    
+    household_id = household_row[0]
+    
+    # Check if user already has devices
+    device_check = await db.execute(
+        text("SELECT COUNT(*) FROM devices WHERE household_id = :hid"),
+        {"hid": household_id},
+    )
+    if device_check.scalar() > 0:
+        return {"message": "Demo data already exists for this household", "created": False}
+    
+    # Get a supplier for the products
+    supplier_result = await db.execute(
+        text("SELECT supplier_id FROM suppliers LIMIT 1")
+    )
+    supplier_row = supplier_result.first()
+    supplier_id = supplier_row[0] if supplier_row else None
+    
+    # Create a smart scale device
+    device_id = uuid.uuid4()
+    await db.execute(
+        text("""
+            INSERT INTO devices (device_id, household_id, device_name, device_type,
+                                 mqtt_topic, is_online, last_seen_at, config_json)
+            VALUES (:did, :hid, 'Pantry Smart Scale', 'smart_scale',
+                    :topic, TRUE, :now, '{}')
+        """),
+        {
+            "did": device_id,
+            "hid": household_id,
+            "topic": f"kitchen/pantry/scale_{uuid.uuid4().hex[:8]}",
+            "now": now,
+        },
+    )
+    
+    # Create sample products
+    products = [
+        {
+            "name": "Basmati Rice",
+            "category": "pantry",
+            "unit_type": "kg",
+            "sku": "RICE-BAS-001",
+            "threshold_min": 0.50,
+            "threshold_max": 5.00,
+        },
+        {
+            "name": "Whole Wheat Atta",
+            "category": "pantry",
+            "unit_type": "kg",
+            "sku": "ATTA-WW-001",
+            "threshold_min": 0.50,
+            "threshold_max": 5.00,
+        },
+        {
+            "name": "Olive Oil",
+            "category": "pantry",
+            "unit_type": "liter",
+            "sku": "OIL-OLV-001",
+            "threshold_min": 0.10,
+            "threshold_max": 1.00,
+        },
+    ]
+    
+    product_ids = []
+    for p in products:
+        product_id = uuid.uuid4()
+        await db.execute(
+            text("""
+                INSERT INTO product_catalog (product_id, household_id, product_name, category,
+                                           unit_type, sku, default_threshold_min, default_threshold_max,
+                                           preferred_supplier_id)
+                VALUES (:pid, :hid, :name, :cat, :unit, :sku, :tmin, :tmax, :sid)
+            """),
+            {
+                "pid": product_id,
+                "hid": household_id,
+                "name": p["name"],
+                "cat": p["category"],
+                "unit": p["unit_type"],
+                "sku": p["sku"],
+                "tmin": p["threshold_min"],
+                "tmax": p["threshold_max"],
+                "sid": supplier_id,
+            },
+        )
+        product_ids.append((product_id, p))
+    
+    # Create inventory items with initial quantities
+    inventory_items = [
+        {"product_id": product_ids[0][0], "quantity": 4.50, "unit_type": "kg", "threshold_min": 0.50, "threshold_max": 5.00},
+        {"product_id": product_ids[1][0], "quantity": 4.50, "unit_type": "kg", "threshold_min": 0.50, "threshold_max": 5.00},
+        {"product_id": product_ids[2][0], "quantity": 0.90, "unit_type": "liter", "threshold_min": 0.10, "threshold_max": 1.00},
+    ]
+    
+    for inv in inventory_items:
+        inv_id = uuid.uuid4()
+        await db.execute(
+            text("""
+                INSERT INTO inventory_current (inventory_id, household_id, product_id, device_id,
+                                             quantity, unit_type, location, threshold_min, threshold_max, last_updated)
+                VALUES (:iid, :hid, :pid, :did, :qty, :unit, 'pantry', :tmin, :tmax, :now)
+            """),
+            {
+                "iid": inv_id,
+                "hid": household_id,
+                "pid": inv["product_id"],
+                "did": device_id,
+                "qty": inv["quantity"],
+                "unit": inv["unit_type"],
+                "tmin": inv["threshold_min"],
+                "tmax": inv["threshold_max"],
+                "now": now,
+            },
+        )
+    
+    # Generate sample sensor readings for the device
+    for i in range(20):
+        reading_time = datetime.now(timezone.utc)
+        reading_value = random.uniform(400, 600)  # Random weight in grams
+        await db.execute(
+            text("""
+                INSERT INTO sensor_readings (device_id, sensor_type, value, unit, recorded_at)
+                VALUES (:did, 'weight', :val, 'gram', :ts)
+            """),
+            {
+                "did": device_id,
+                "val": round(reading_value, 2),
+                "ts": reading_time,
+            },
+        )
+    
+    await db.commit()
+    
+    logger.info("Generated demo data for user %s (household %s)", user_id, household_id)
+    
+    return {
+        "message": "Demo data generated successfully",
+        "created": True,
+        "devices_created": 1,
+        "products_created": len(products),
+        "inventory_items_created": len(inventory_items),
+        "sensor_readings_created": 20,
     }

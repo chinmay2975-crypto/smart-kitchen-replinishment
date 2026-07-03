@@ -23,6 +23,43 @@ async function loadDashboard() {
     }
 }
 
+async function generateDemoData() {
+    if (!api.isAuthenticated()) {
+        showToast('Please login first', 'error');
+        return;
+    }
+    
+    const btn = document.getElementById('generate-demo-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
+    }
+    
+    try {
+        const response = await api.generateDemoData();
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast(data.message, 'success');
+            // Refresh dashboard after a short delay
+            setTimeout(() => {
+                loadDashboard();
+                loadDevices();
+            }, 1000);
+        } else {
+            showToast(data.detail || 'Failed to generate demo data', 'error');
+        }
+    } catch (error) {
+        console.error('Error generating demo data:', error);
+        showToast('Failed to generate demo data', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-magic mr-2"></i>Generate Demo Data';
+        }
+    }
+}
+
 function renderDashboard(data) {
     const inventory = data.inventory || [];
     const orders = data.recent_orders || [];
@@ -37,7 +74,7 @@ function renderDashboard(data) {
     // Render inventory grid
     const grid = document.getElementById('inventory-grid');
     if (inventory.length === 0) {
-        grid.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">No inventory items found. The simulation will create them shortly.</div>';
+        grid.innerHTML = '<div class="col-span-full text-center py-12"><div class="text-6xl mb-4">📦</div><h3 class="text-xl font-semibold text-gray-700 mb-2">No Inventory Items</h3><p class="text-gray-500 mb-4">Generate demo data to see sample inventory and visualization</p><button id="generate-demo-btn" onclick="generateDemoData()" class="bg-emerald-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-emerald-700 transition"><i class="fas fa-magic mr-2"></i>Generate Demo Data</button></div>';
     } else {
         grid.innerHTML = inventory.map(item => createInventoryCard(item)).join('');
     }

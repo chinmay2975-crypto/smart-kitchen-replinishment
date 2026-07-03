@@ -1,7 +1,7 @@
 // API Configuration and Client
 // For local development, use: 'http://localhost:8000
-// For production (Cloud Run), use: 'https://backend-309488529038.asia-south1.run.app'
-const API_BASE = 'https://backend-309488529038.asia-south1.run.app';
+// For production (Cloud Run), use: 'https://smart-kitchen-api-309488529038.asia-south1.run.app'
+const API_BASE = 'https://smart-kitchen-api-309488529038.asia-south1.run.app';
 
 class ApiClient {
     constructor() {
@@ -185,6 +185,14 @@ class ApiClient {
     // Profile
     async getProfile() {
         const response = await this.request('/api/v1/profile');
+        return response;
+    }
+
+    // Demo data generation
+    async generateDemoData() {
+        const response = await this.request('/api/v1/demo/generate', {
+            method: 'POST',
+        });
         return response;
     }
 }
