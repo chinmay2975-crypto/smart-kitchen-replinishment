@@ -271,7 +271,14 @@ async def _container_devices_tick() -> None:
             if owner_id is None:
                 continue
 
-            capacity = float(reorder_level) * 2 if reorder_level is not None else DEFAULT_CONTAINER_CAPACITY_GRAMS
+            if reorder_level is not None and reorder_quantity is not None:
+                capacity = float(reorder_level) + float(reorder_quantity)
+            elif reorder_level is not None:
+                capacity = float(reorder_level) * 2
+            else:
+                capacity = DEFAULT_CONTAINER_CAPACITY_GRAMS
+            if last_reading is not None and float(last_reading) > capacity:
+                capacity = float(last_reading)
 
             if last_reading is None:
                 # Device claimed before initial-fill seeding existed — give it

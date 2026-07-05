@@ -232,10 +232,15 @@ async def claim_device(
 
     # Seed an initial reading representing a freshly-filled container, so the
     # container visual and background simulation both have a starting point
-    # instead of sitting empty until a real/manual reading arrives.
-    initial_quantity = (
-        float(req.reorder_level) * 2 if req.reorder_level is not None else DEFAULT_INITIAL_CAPACITY_GRAMS
-    )
+    # instead of sitting empty until a real/manual reading arrives. "Full"
+    # matches what a delivery restocks to (reorder_level + reorder_quantity),
+    # consistent with the frontend's capacity calculation.
+    if req.reorder_level is not None and req.reorder_quantity is not None:
+        initial_quantity = float(req.reorder_level) + float(req.reorder_quantity)
+    elif req.reorder_level is not None:
+        initial_quantity = float(req.reorder_level) * 2
+    else:
+        initial_quantity = DEFAULT_INITIAL_CAPACITY_GRAMS
     initial_reading = DeviceReading(
         user_id=user_id,
         device_id=device_id,

@@ -104,7 +104,21 @@ function buildContainerSvg(uid, fillPct, markerPct, isLow) {
 function createContainerCard(device) {
     const current = device.current_quantity;
     const reorderLevel = device.reorder_level;
-    const capacity = reorderLevel ? reorderLevel * 2 : Math.max(current || 0, 100);
+    const reorderQuantity = device.reorder_quantity;
+    // Capacity is "full" = what a delivery restocks to (reorder_level +
+    // reorder_quantity), falling back to reorder_level*2 or the current
+    // reading itself so the fill % never silently clamps at 100%.
+    let capacity;
+    if (reorderLevel != null && reorderQuantity != null) {
+        capacity = reorderLevel + reorderQuantity;
+    } else if (reorderLevel != null) {
+        capacity = reorderLevel * 2;
+    } else {
+        capacity = Math.max(current || 0, 100);
+    }
+    if (current != null && current > capacity) {
+        capacity = current;
+    }
     const fillPct = current != null ? (current / capacity) * 100 : 0;
     const markerPct = reorderLevel != null ? (reorderLevel / capacity) * 100 : null;
     const isLow = reorderLevel != null && current != null && current < reorderLevel;
