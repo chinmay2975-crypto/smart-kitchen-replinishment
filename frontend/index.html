@@ -129,6 +129,10 @@
                         <button onclick="switchTab('devices')" id="tab-devices" class="tab-btn px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent">
                             <i class="fas fa-microchip mr-2"></i>My Devices
                         </button>
+                        <button onclick="switchTab('cart')" id="tab-cart" class="tab-btn relative px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent">
+                            <i class="fas fa-shopping-cart mr-2"></i>Cart
+                            <span id="cart-count-badge" class="hidden absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5">0</span>
+                        </button>
                         <button onclick="switchTab('profile')" id="tab-profile" class="tab-btn px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent">
                             <i class="fas fa-user mr-2"></i>Profile
                         </button>
@@ -165,6 +169,14 @@
                         </div>
                     </div>
 
+<!-- Inventory Chart -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-4">Inventory Overview</h3>
+                        <div id="inventory-chart-container" class="bg-white rounded-xl shadow-sm p-4 mb-4">
+                            <canvas id="inventory-chart" height="100"></canvas>
+                        </div>
+                    </div>
+
                     <!-- Inventory Grid -->
                     <div class="mb-8">
                         <h3 class="text-lg font-semibold text-gray-700 mb-4">Current Inventory</h3>
@@ -193,6 +205,19 @@
                         </button>
                     </div>
                     <div id="devices-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Cart Tab -->
+                <div id="content-cart" class="tab-content hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Auto-Reorder Cart</h2>
+                        <button id="checkout-cart-btn" onclick="handleCheckoutCart()" disabled class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-credit-card mr-2"></i>Checkout
+                        </button>
+                    </div>
+                    <div id="cart-items-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <!-- Populated by JS -->
                     </div>
                 </div>
@@ -246,6 +271,18 @@
                     <label class="block text-gray-700 text-sm font-medium mb-2">Device Name</label>
                     <input type="text" id="claim-name" required placeholder="e.g. Pantry Scale" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
                 </div>
+                <div class="mb-4 grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-gray-700 text-sm font-medium mb-2">Reorder Level</label>
+                        <input type="number" id="claim-reorder-level" min="0" step="0.01" placeholder="e.g. 100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        <p class="text-xs text-gray-400 mt-1">Auto-reorder when reading falls below this</p>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-medium mb-2">Reorder Quantity</label>
+                        <input type="number" id="claim-reorder-quantity" min="0.01" step="0.01" placeholder="e.g. 5" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                        <p class="text-xs text-gray-400 mt-1">Quantity to add to cart</p>
+                    </div>
+                </div>
                 <div class="flex space-x-3">
                     <button type="submit" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition">
                         <i class="fas fa-check mr-1"></i>Claim
@@ -265,6 +302,7 @@
     <script src="js/auth.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/devices.js"></script>
+    <script src="js/cart.js"></script>
     <script src="js/profile.js"></script>
     <script src="js/app.js"></script>
 </body>

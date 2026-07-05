@@ -83,13 +83,17 @@ async function handleClaimDevice(event) {
     event.preventDefault();
     const uid = document.getElementById('claim-uid').value;
     const name = document.getElementById('claim-name').value;
+    const reorderLevelRaw = document.getElementById('claim-reorder-level').value;
+    const reorderQuantityRaw = document.getElementById('claim-reorder-quantity').value;
+    const reorderLevel = reorderLevelRaw !== '' ? parseFloat(reorderLevelRaw) : null;
+    const reorderQuantity = reorderQuantityRaw !== '' ? parseFloat(reorderQuantityRaw) : null;
 
     const submitBtn = event.target.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Claiming...';
 
     try {
-        const response = await api.claimDevice(uid, name);
+        const response = await api.claimDevice(uid, name, reorderLevel, reorderQuantity);
         const data = await response.json();
 
         if (response.ok) {
@@ -166,6 +170,14 @@ async function showDeviceDetail(deviceId) {
                             <div>
                                 <span class="text-xs text-gray-500">Device ID</span>
                                 <p class="font-medium text-xs font-mono">${device.device_id}</p>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500">Reorder Level</span>
+                                <p class="font-medium">${device.reorder_level ?? 'Not set'}</p>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500">Reorder Quantity</span>
+                                <p class="font-medium">${device.reorder_quantity ?? 'Not set'}</p>
                             </div>
                         </div>
 
@@ -299,8 +311,8 @@ async function generateDemoData(deviceId) {
     try {
         showToast('Generating demo data...', 'info');
         
-        // Use the new demo generation endpoint
-        const response = await api.generateDemoData();
+        // Use the new demo generation endpoint with force=true to regenerate
+        const response = await api.generateDemoData(true);
         const data = await response.json();
         
         if (response.ok) {
@@ -311,11 +323,11 @@ async function generateDemoData(deviceId) {
                 showDeviceDetail(deviceId);
             }, 1000);
         } else {
-            showToast(data.detail || 'Failed to generate demo data', 'error');
+            showToast(data.detail || data.message || 'Failed to generate demo data', 'error');
         }
     } catch (error) {
         console.error('Error generating demo data:', error);
-        showToast('Failed to generate demo data', 'error');
+        showToast('Failed to generate demo data. Please check your connection.', 'error');
     }
 }
 

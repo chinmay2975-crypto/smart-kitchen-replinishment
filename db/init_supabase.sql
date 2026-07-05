@@ -66,7 +66,9 @@ CREATE TABLE devices (
     last_seen_at   TIMESTAMPTZ,
     config_json    JSONB DEFAULT '{}',
     registered_at  TIMESTAMPTZ DEFAULT NOW(),
-    deactivated_at TIMESTAMPTZ
+    deactivated_at TIMESTAMPTZ,
+    reorder_level    NUMERIC(10,2),
+    reorder_quantity NUMERIC(10,2)
 );
 
 -- 1.5 Product/Ingredient Catalog
@@ -164,6 +166,23 @@ CREATE TABLE device_readings (
 );
 
 CREATE INDEX idx_device_readings_user_created ON device_readings(user_id, created_at);
+
+-- 1.9b Auto-Reorder Cart (Amazon-style pending cart, separate from replenishment_orders)
+CREATE TABLE cart_items (
+    cart_item_id   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id        UUID NOT NULL REFERENCES app_users(user_id) ON DELETE CASCADE,
+    container_id   UUID NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+    item_name      VARCHAR(255) NOT NULL,
+    quantity       NUMERIC(10,2) NOT NULL,
+    status         VARCHAR(20) NOT NULL DEFAULT 'pending_cart'
+                   CHECK (status IN ('pending_cart', 'placed', 'cancelled')),
+    estimated_delivery DATE,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_cart_items_user_status ON cart_items(user_id, status);
+CREATE INDEX idx_cart_items_container_status ON cart_items(container_id, status);
 
 -- 1.10 Supplier Registry
 CREATE TABLE suppliers (

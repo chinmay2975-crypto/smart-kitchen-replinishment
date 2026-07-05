@@ -213,10 +213,12 @@ async def get_dashboard_data(
 async def generate_demo_data(
     user_id: str = Depends(get_user_id_from_token),
     db: AsyncSession = Depends(get_db),
+    force: bool = False,
 ):
     """
     Generate demo data for the authenticated user.
     Creates sample devices, products, and inventory items.
+    If force=true, will clear existing demo data and regenerate.
     """
     now = datetime.now(timezone.utc)
     
@@ -236,13 +238,24 @@ async def generate_demo_data(
     
     household_id = household_row[0]
     
+    # If force=true, clear existing demo data first
+    if force:
+        logger.info("Force regenerating demo data for user %s", user_id)
+        # Delete in correct order to respect foreign key constraints
+        await db.execute(text("DELETE FROM sensor_readings WHERE device_id IN "
+            "(SELECT device_id FROM devices WHERE household_id = :hid)"), {"hid": household_id})
+        await db.execute(text("DELETE FROM inventory_current WHERE household_id = :hid"), {"hid": household_id})
+        await db.execute(text("DELETE FROM product_catalog WHERE household_id = :hid"), {"hid": household_id})
+        await db.execute(text("DELETE FROM devices WHERE household_id = :hid"), {"hid": household_id})
+        await db.commit()
+    
     # Check if user already has devices
     device_check = await db.execute(
         text("SELECT COUNT(*) FROM devices WHERE household_id = :hid"),
         {"hid": household_id},
     )
-    if device_check.scalar() > 0:
-        return {"message": "Demo data already exists for this household", "created": False}
+    if device_check.scalar() > 0 and not force:
+        return {"message": "Demo data already exists for this household. Use force=true to regenerate.", "created": False}
     
     # Get a supplier for the products
     supplier_result = await db.execute(

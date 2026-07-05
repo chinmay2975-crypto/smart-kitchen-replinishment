@@ -80,6 +80,8 @@ class Device(Base):
     config_json = mapped_column(JSONB, default={})
     registered_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     deactivated_at = mapped_column(DateTime(timezone=True), nullable=True)
+    reorder_level = mapped_column(Numeric(10, 2), nullable=True)
+    reorder_quantity = mapped_column(Numeric(10, 2), nullable=True)
 
 
 class ProductCatalog(Base):
@@ -134,6 +136,28 @@ class ReplenishmentOrder(Base):
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     delivered_at = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CartItem(Base):
+    """Amazon-style auto-reorder cart entry, distinct from the household
+    replenishment_orders/order_line_items pipeline used by the background
+    replenishment engine."""
+    __tablename__ = "cart_items"
+
+    cart_item_id = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = mapped_column(UUID(as_uuid=True), ForeignKey("app_users.user_id", ondelete="CASCADE"), nullable=False)
+    container_id = mapped_column(UUID(as_uuid=True), ForeignKey("devices.device_id", ondelete="CASCADE"), nullable=False)
+    item_name = mapped_column(String(255), nullable=False)
+    quantity = mapped_column(Numeric(10, 2), nullable=False)
+    status = mapped_column(String(20), nullable=False, default="pending_cart")
+    estimated_delivery = mapped_column(Date, nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index('idx_cart_items_user_status', 'user_id', 'status'),
+        Index('idx_cart_items_container_status', 'container_id', 'status'),
+    )
 
 
 class OrderLineItem(Base):

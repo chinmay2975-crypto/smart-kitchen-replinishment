@@ -169,10 +169,15 @@ class ApiClient {
         return response;
     }
 
-    async claimDevice(deviceUid, deviceName) {
+    async claimDevice(deviceUid, deviceName, reorderLevel = null, reorderQuantity = null) {
         const response = await this.request('/api/v1/devices/claim', {
             method: 'POST',
-            body: JSON.stringify({ device_uid: deviceUid, device_name: deviceName }),
+            body: JSON.stringify({
+                device_uid: deviceUid,
+                device_name: deviceName,
+                reorder_level: reorderLevel,
+                reorder_quantity: reorderQuantity,
+            }),
         });
         return response;
     }
@@ -188,9 +193,22 @@ class ApiClient {
         return response;
     }
 
-    // Demo data generation
-    async generateDemoData() {
-        const response = await this.request('/api/v1/demo/generate', {
+// Demo data generation
+    async generateDemoData(force = false) {
+        const response = await this.request(`/api/v1/demo/generate?force=${force}`, {
+            method: 'POST',
+        });
+        return response;
+    }
+
+    // Cart
+    async getCart() {
+        const response = await this.request('/api/v1/cart');
+        return response;
+    }
+
+    async checkoutCart() {
+        const response = await this.request('/api/v1/cart/checkout', {
             method: 'POST',
         });
         return response;

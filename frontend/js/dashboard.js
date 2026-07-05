@@ -23,7 +23,7 @@ async function loadDashboard() {
     }
 }
 
-async function generateDemoData() {
+async function generateDemoData(force = false) {
     if (!api.isAuthenticated()) {
         showToast('Please login first', 'error');
         return;
@@ -36,7 +36,7 @@ async function generateDemoData() {
     }
     
     try {
-        const response = await api.generateDemoData();
+        const response = await api.generateDemoData(force);
         const data = await response.json();
         
         if (response.ok) {
@@ -47,11 +47,19 @@ async function generateDemoData() {
                 loadDevices();
             }, 1000);
         } else {
-            showToast(data.detail || 'Failed to generate demo data', 'error');
+            // If demo data already exists, show option to force regenerate
+            if (data.detail && data.detail.includes('already exists') && !force) {
+                const shouldForce = confirm('Demo data already exists. Would you like to regenerate it?');
+                if (shouldForce) {
+                    generateDemoData(true);
+                }
+            } else {
+                showToast(data.detail || data.message || 'Failed to generate demo data', 'error');
+            }
         }
     } catch (error) {
         console.error('Error generating demo data:', error);
-        showToast('Failed to generate demo data', 'error');
+        showToast('Failed to generate demo data. Please check your connection.', 'error');
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -79,6 +87,9 @@ function renderDashboard(data) {
         grid.innerHTML = inventory.map(item => createInventoryCard(item)).join('');
     }
 
+    // Render inventory chart
+    renderInventoryChart(inventory);
+
     // Render orders table
     const container = document.getElementById('orders-table-container');
     if (orders.length === 0) {
@@ -86,6 +97,73 @@ function renderDashboard(data) {
     } else {
         container.innerHTML = createOrdersTable(orders);
     }
+}
+
+function renderInventoryChart(inventory) {
+    const chartContainer = document.getElementById('inventory-chart-container');
+    if (!chartContainer) return;
+
+    if (inventory.length === 0) {
+        chartContainer.innerHTML = '<div class="text-center py-8 text-gray-400">No data to display</div>';
+        return;
+    }
+
+    // Destroy existing chart if it exists
+    if (window.inventoryChart) {
+        window.inventoryChart.destroy();
+    }
+
+    const ctx = document.getElementById('inventory-chart');
+    if (!ctx) return;
+
+    const labels = inventory.map(item => item.product_name);
+    const values = inventory.map(item => item.quantity);
+    const colors = inventory.map(item => {
+        if (item.stock_status === 'out_of_stock') return 'rgb(239, 68, 68)';
+        if (item.stock_status === 'low_stock') return 'rgb(234, 179, 8)';
+        return 'rgb(16, 185, 129)';
+    });
+
+    window.inventoryChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Current Quantity',
+                data: values,
+                backgroundColor: colors,
+                borderColor: colors.map(c => c.replace('rgb', 'rgba').replace(')', ', 0.8)')),
+                borderWidth: 1,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const item = inventory[context.dataIndex];
+                            return `${context.parsed.y} ${item.unit_type}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value;
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 function createInventoryCard(item) {
@@ -175,7 +253,10 @@ function createOrdersTable(orders) {
 
 function startDashboardRefresh() {
     if (dashboardRefreshInterval) clearInterval(dashboardRefreshInterval);
-    dashboardRefreshInterval = setInterval(loadDashboard, 5000);
+    dashboardRefreshInterval = setInterval(() => {
+        loadDashboard();
+        loadCart();
+    }, 5000);
 }
 
 function stopDashboardRefresh() {

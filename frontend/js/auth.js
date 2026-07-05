@@ -189,5 +189,6 @@ function enterApp(userData) {
     loadDashboard();
     loadDevices();
     loadProfile();
+    loadCart();
     switchTab('dashboard');
 }

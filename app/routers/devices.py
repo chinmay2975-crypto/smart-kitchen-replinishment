@@ -37,6 +37,8 @@ def get_user_id_from_token(authorization: str = Header(...)) -> str:
 class ClaimDeviceRequest(BaseModel):
     device_uid: str = Field(..., min_length=1, description="MAC address or UID of the device")
     device_name: str = Field(..., min_length=1, max_length=100)
+    reorder_level: float | None = Field(None, ge=0, description="Reading threshold below which an auto-reorder is triggered")
+    reorder_quantity: float | None = Field(None, gt=0, description="Quantity to reorder when the reorder_level is crossed")
 
 class DeviceInfoResponse(BaseModel):
     device_id: str
@@ -45,6 +47,8 @@ class DeviceInfoResponse(BaseModel):
     is_online: bool
     last_seen_at: str | None = None
     mqtt_topic: str | None = None
+    reorder_level: float | None = None
+    reorder_quantity: float | None = None
 
 class DeviceDetailResponse(DeviceInfoResponse):
     household_id: str | None = None
@@ -66,7 +70,8 @@ async def get_devices(
     result = await db.execute(
         text("""
             SELECT d.device_id, d.device_name, d.device_type,
-                   d.is_online, d.last_seen_at, d.mqtt_topic
+                   d.is_online, d.last_seen_at, d.mqtt_topic,
+                   d.reorder_level, d.reorder_quantity
             FROM devices d
             JOIN households h ON d.household_id = h.household_id
             JOIN household_members hm ON hm.household_id = h.household_id
@@ -84,6 +89,8 @@ async def get_devices(
             is_online=row[3],
             last_seen_at=str(row[4]) if row[4] else None,
             mqtt_topic=row[5],
+            reorder_level=float(row[6]) if row[6] is not None else None,
+            reorder_quantity=float(row[7]) if row[7] is not None else None,
         )
         for row in rows
     ]
@@ -100,7 +107,8 @@ async def get_device_detail(
         text("""
             SELECT d.device_id, d.device_name, d.device_type,
                    d.is_online, d.last_seen_at, d.mqtt_topic,
-                   d.household_id, d.firmware_ver, d.config_json
+                   d.household_id, d.firmware_ver, d.config_json,
+                   d.reorder_level, d.reorder_quantity
             FROM devices d
             JOIN households h ON d.household_id = h.household_id
             JOIN household_members hm ON hm.household_id = h.household_id
@@ -146,6 +154,8 @@ async def get_device_detail(
         household_id=str(row[6]) if row[6] else None,
         firmware_ver=row[7],
         config_json=row[8] if row[8] else {},
+        reorder_level=float(row[9]) if row[9] is not None else None,
+        reorder_quantity=float(row[10]) if row[10] is not None else None,
         latest_telemetry=latest_telemetry,
     )
 
@@ -182,9 +192,11 @@ async def claim_device(
     now = datetime.now(timezone.utc)
     await db.execute(
         text("""
-            INSERT INTO devices (device_id, household_id, device_name, device_type, 
-                               mqtt_topic, is_online, last_seen_at, registered_at)
-            VALUES (:did, :hid, :dname, 'smart_scale', :topic, TRUE, :now, :now)
+            INSERT INTO devices (device_id, household_id, device_name, device_type,
+                               mqtt_topic, is_online, last_seen_at, registered_at,
+                               reorder_level, reorder_quantity)
+            VALUES (:did, :hid, :dname, 'smart_scale', :topic, TRUE, :now, :now,
+                    :reorder_level, :reorder_quantity)
         """),
         {
             "did": device_id,
@@ -192,6 +204,8 @@ async def claim_device(
             "dname": req.device_name,
             "topic": mqtt_topic,
             "now": now,
+            "reorder_level": req.reorder_level,
+            "reorder_quantity": req.reorder_quantity,
         },
     )
     await db.commit()
@@ -202,6 +216,8 @@ async def claim_device(
         device_type="smart_scale",
         is_online=True,
         last_seen_at=str(now),
+        reorder_level=req.reorder_level,
+        reorder_quantity=req.reorder_quantity,
         mqtt_topic=mqtt_topic,
     )
 

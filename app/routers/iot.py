@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.security import decode_token
-from app.models.orm import DeviceReading
+from app.models.orm import DeviceReading, CartItem
 
 logger = logging.getLogger("smart_kitchen.iot")
 router = APIRouter(prefix="/api/v1", tags=["iot"])
@@ -90,10 +90,11 @@ async def create_device_reading(
     """
     # Validate device_id if provided - ensure it belongs to user's household
     device_uuid = None
+    device_row = None
     if req.device_id:
         device_result = await db.execute(
             text("""
-                SELECT d.device_id
+                SELECT d.device_id, d.device_name, d.reorder_level, d.reorder_quantity
                 FROM devices d
                 JOIN households h ON d.household_id = h.household_id
                 JOIN household_members hm ON hm.household_id = h.household_id
@@ -134,6 +135,36 @@ async def create_device_reading(
         "Created device reading %s for user %s: %.2f %s",
         reading.reading_id, user_id, req.reading_value, req.unit
     )
+
+    # Auto-reorder trigger: if the reading is below the container's reorder_level,
+    # add an item to the cart unless one is already pending for this container.
+    if device_row is not None:
+        reorder_level = device_row[2]
+        reorder_quantity = device_row[3]
+        if reorder_level is not None and req.reading_value < float(reorder_level):
+            existing_cart_item = await db.execute(
+                text("""
+                    SELECT cart_item_id FROM cart_items
+                    WHERE container_id = :cid AND status = 'pending_cart'
+                    LIMIT 1
+                """),
+                {"cid": device_uuid},
+            )
+            if existing_cart_item.first() is None:
+                device_name = device_row[1]
+                cart_item = CartItem(
+                    user_id=user_id,
+                    container_id=device_uuid,
+                    item_name=f"{device_name} Supply Refill",
+                    quantity=reorder_quantity if reorder_quantity is not None else 1,
+                    status="pending_cart",
+                )
+                db.add(cart_item)
+                await db.commit()
+                logger.info(
+                    "Auto-reorder triggered for container %s (reading %.2f < reorder_level %.2f)",
+                    device_uuid, req.reading_value, float(reorder_level)
+                )
 
     return DeviceReadingResponse(
         reading_id=reading.reading_id,

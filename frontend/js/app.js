@@ -24,6 +24,10 @@ function switchTab(tabName) {
     } else {
         stopDashboardRefresh();
     }
+
+    if (tabName === 'cart') {
+        loadCart();
+    }
 }
 
 // Initialize the app
