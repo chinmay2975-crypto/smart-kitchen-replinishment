@@ -158,6 +158,7 @@ async function handleDeleteDevice(deviceId, deviceName) {
         if (response.ok) {
             showToast(`Device "${deviceName}" deleted`, 'success');
             loadDevices();
+            loadDashboard();
         } else {
             const data = await response.json().catch(() => ({}));
             showToast(data.detail || 'Failed to delete device', 'error');

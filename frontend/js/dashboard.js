@@ -8,16 +8,22 @@ async function loadDashboard() {
     }
 
     try {
-        const response = await api.getDashboardData();
-        if (!response.ok) {
-            if (response.status === 401) {
+        const [ordersResponse, devicesResponse] = await Promise.all([
+            api.getDashboardData(),
+            api.getDevices(),
+        ]);
+
+        if (!ordersResponse.ok || !devicesResponse.ok) {
+            if (ordersResponse.status === 401 || devicesResponse.status === 401) {
                 handleLogout();
                 return;
             }
             throw new Error('Failed to load dashboard');
         }
-        const data = await response.json();
-        renderDashboard(data);
+
+        const ordersData = await ordersResponse.json();
+        const devices = await devicesResponse.json();
+        renderDashboard(devices, ordersData.recent_orders || []);
     } catch (error) {
         console.error('Dashboard load error:', error);
     }
@@ -68,70 +74,36 @@ async function generateDemoData(force = false) {
     }
 }
 
-function renderDashboard(data) {
-    const inventory = data.inventory || [];
-    const orders = data.recent_orders || [];
+function renderDashboard(devices, orders) {
+    const lowStock = devices.filter(d => d.reorder_level != null && d.current_quantity != null && d.current_quantity < d.reorder_level);
+    const outOfStock = devices.filter(d => d.current_quantity === 0);
 
     // Update summary cards
-    document.getElementById('total-items').textContent = inventory.length;
-    document.getElementById('low-stock-count').textContent = inventory.filter(i => i.stock_status === 'low_stock').length;
-    document.getElementById('out-of-stock-count').textContent = inventory.filter(i => i.stock_status === 'out_of_stock').length;
+    document.getElementById('total-items').textContent = devices.length;
+    document.getElementById('low-stock-count').textContent = lowStock.length;
+    document.getElementById('out-of-stock-count').textContent = outOfStock.length;
     document.getElementById('order-count').textContent = orders.length;
     document.getElementById('last-updated').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
 
-    // Render inventory grid
+    // Render container grid (same cards as My Devices — name and quantity
+    // are entirely user-decided via the Claim Device form, no more hardcoded
+    // demo product names)
     const grid = document.getElementById('inventory-grid');
-    if (inventory.length === 0) {
-        grid.innerHTML = '<div class="col-span-full text-center py-12"><div class="text-6xl mb-4">📦</div><h3 class="text-xl font-semibold text-gray-700 mb-2">No Inventory Items</h3><p class="text-gray-500 mb-4">Generate demo data to see sample inventory and visualization</p><button id="generate-demo-btn" onclick="generateDemoData()" class="bg-emerald-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-emerald-700 transition"><i class="fas fa-magic mr-2"></i>Generate Demo Data</button></div>';
+    if (devices.length === 0) {
+        grid.innerHTML = '<div class="col-span-full text-center py-12"><div class="text-6xl mb-4">📦</div><h3 class="text-xl font-semibold text-gray-700 mb-2">No Containers Yet</h3><p class="text-gray-500 mb-4">Claim a device from the My Devices tab, or generate demo data, to see a container here</p><button id="generate-demo-btn" onclick="generateDemoData()" class="bg-emerald-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-emerald-700 transition"><i class="fas fa-magic mr-2"></i>Generate Demo Data</button></div>';
     } else {
-        grid.innerHTML = inventory.map(item => createInventoryCard(item)).join('');
+        grid.innerHTML = devices.map(device => createContainerCard(device)).join('');
     }
 
-    // Render orders table
+    // Render orders table (lives on the Cart tab)
     const container = document.getElementById('orders-table-container');
-    if (orders.length === 0) {
-        container.innerHTML = '<div class="text-center py-8 text-gray-500">No replenishment orders yet. They will appear when stock runs low.</div>';
-    } else {
-        container.innerHTML = createOrdersTable(orders);
+    if (container) {
+        if (orders.length === 0) {
+            container.innerHTML = '<div class="text-center py-8 text-gray-500">No replenishment orders yet. They will appear when stock runs low.</div>';
+        } else {
+            container.innerHTML = createOrdersTable(orders);
+        }
     }
-}
-
-function createInventoryCard(item) {
-    const maxQty = item.threshold_max || Math.max(item.quantity, 1);
-    const fillPct = (item.quantity / maxQty) * 100;
-    const markerPct = item.threshold_min != null ? (item.threshold_min / maxQty) * 100 : null;
-    const isLow = item.stock_status === 'low_stock' || item.stock_status === 'out_of_stock';
-    const statusLabels = {
-        'ok': 'In Stock',
-        'low_stock': 'Low Stock',
-        'out_of_stock': 'Out of Stock'
-    };
-    const uid = item.inventory_id.replace(/[^a-zA-Z0-9]/g, '');
-
-    return `
-        <div class="inventory-card bg-white rounded-xl shadow-sm p-5 border border-gray-100">
-            <div class="flex justify-between items-start mb-3">
-                <div>
-                    <h4 class="font-semibold text-gray-800">${item.product_name}</h4>
-                    <span class="text-xs text-gray-500">${item.category} • ${item.location}</span>
-                </div>
-                <span class="px-2 py-1 rounded-full text-xs font-medium status-${item.stock_status}">
-                    ${statusLabels[item.stock_status]}
-                </span>
-            </div>
-            <div class="flex justify-center mb-2">
-                ${buildContainerSvg(uid, fillPct, markerPct, isLow)}
-            </div>
-            <div class="text-center mb-2">
-                <span class="text-lg font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}">${item.quantity} ${item.unit_type}</span>
-                <div class="text-xs text-gray-400">max ${maxQty} ${item.unit_type}</div>
-            </div>
-            <div class="flex justify-between text-xs text-gray-400 mt-2">
-                <span>Min: ${item.threshold_min || 0} ${item.unit_type}</span>
-                <span>Updated: ${item.last_updated ? new Date(item.last_updated).toLocaleTimeString() : 'N/A'}</span>
-            </div>
-        </div>
-    `;
 }
 
 function createOrdersTable(orders) {

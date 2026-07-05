@@ -20,6 +20,7 @@ function switchTab(tabName) {
 
     // Start/stop refresh based on active tab
     if (tabName === 'dashboard') {
+        loadDashboard();
         startDashboardRefresh();
     } else {
         stopDashboardRefresh();
@@ -33,6 +34,7 @@ function switchTab(tabName) {
 
     if (tabName === 'cart') {
         loadCart();
+        loadDashboard(); // also populates the Recent Replenishment Orders table
     }
 }
 
