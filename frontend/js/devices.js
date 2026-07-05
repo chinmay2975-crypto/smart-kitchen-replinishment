@@ -69,6 +69,10 @@ function buildContainerSvg(uid, fillPct, markerPct, isLow) {
         return `<line x1="10" y1="${y}" x2="15" y2="${y}" stroke="#cbd5e1" stroke-width="1.5"/>`;
     }).join('');
 
+    // A subtle wavy line right at the fill surface so it reads as loose
+    // material settling rather than a flat, static block of color.
+    const waveTop = fillHeight > 0 ? fillY : null;
+
     return `
         <svg width="96" height="140" viewBox="0 0 96 140" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -77,6 +81,11 @@ function buildContainerSvg(uid, fillPct, markerPct, isLow) {
                     <ellipse cx="2" cy="2" rx="1.4" ry="0.8" fill="#cbb583"/>
                     <ellipse cx="5" cy="5" rx="1.4" ry="0.8" fill="#cbb583"/>
                 </pattern>
+                <linearGradient id="shade-${uid}" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
+                    <stop offset="15%" stop-color="#ffffff" stop-opacity="0"/>
+                    <stop offset="100%" stop-color="#8a7541" stop-opacity="0.25"/>
+                </linearGradient>
                 <clipPath id="clip-${uid}">
                     <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" rx="6"/>
                 </clipPath>
@@ -92,7 +101,12 @@ function buildContainerSvg(uid, fillPct, markerPct, isLow) {
             <!-- fill -->
             <g clip-path="url(#clip-${uid})">
                 <rect x="11" y="${fillY}" width="74" height="${fillHeight}" fill="url(#grain-${uid})"/>
+                <rect x="11" y="${fillY}" width="74" height="${fillHeight}" fill="url(#shade-${uid})"/>
+                ${waveTop !== null ? `<path d="M 11 ${waveTop} Q 28 ${waveTop - 2.5} 48 ${waveTop} T 85 ${waveTop}" fill="none" stroke="#8a7541" stroke-opacity="0.4" stroke-width="1.5"/>` : ''}
             </g>
+
+            <!-- glass highlight for a less flat look -->
+            <rect x="15" y="${bodyTop + 4}" width="6" height="${bodyHeight - 8}" rx="3" fill="#ffffff" opacity="0.25"/>
 
             <!-- measurement ticks -->
             ${ticks}

@@ -13,6 +13,7 @@ from app.routers.cart import router as cart_router
 from app.routers.devices import router as devices_router
 from app.routers.iot import router as iot_router
 from app.services.data_simulator import (
+    run_container_simulation,
     run_telemetry_simulation,
     seed_initial_simulation_data,
 )
@@ -34,6 +35,7 @@ settings = get_settings()
 # Background task references (for clean shutdown)
 # ---------------------------------------------------------------------------
 _telemetry_task: asyncio.Task | None = None
+_container_task: asyncio.Task | None = None
 _engine_task: asyncio.Task | None = None
 
 
@@ -45,7 +47,7 @@ async def lifespan(app: FastAPI):
     - Spins up the telemetry simulation and replenishment engine background loops.
     - Cancels both tasks gracefully on shutdown.
     """
-    global _telemetry_task, _engine_task
+    global _telemetry_task, _container_task, _engine_task
 
     logger.info("=== Smart Kitchen Replenishment System starting up ===")
 
@@ -56,32 +58,31 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not ensure auth tables: {e}")
 
-    # Only run simulation / seeding in development mode
+    # The container simulation (depleting real claimed devices and driving
+    # the auto-reorder cart) always runs — it's not demo data.
+    _container_task = asyncio.create_task(
+        run_container_simulation(),
+        name="container-simulator",
+    )
+    _engine_task = asyncio.create_task(
+        run_replenishment_engine(),
+        name="replenishment-engine",
+    )
+
+    # Only run demo seeding / demo telemetry simulation in development mode
     if settings.enable_simulation:
-        # 1. Seed data (runs once, checks if DB is empty internally)
         try:
             await seed_initial_simulation_data()
         except Exception as e:
             logger.warning(f"Skipping seed data: {e}")
 
-        # 2. Start background simulation tasks
         _telemetry_task = asyncio.create_task(
             run_telemetry_simulation(),
             name="telemetry-simulator",
         )
-        _engine_task = asyncio.create_task(
-            run_replenishment_engine(),
-            name="replenishment-engine",
-        )
-
         logger.info("Background tasks started. Application ready.")
     else:
-        # In production, only run the replenishment engine (no simulated telemetry)
-        _engine_task = asyncio.create_task(
-            run_replenishment_engine(),
-            name="replenishment-engine",
-        )
-        logger.info("Production mode: replenishment engine running, simulation disabled.")
+        logger.info("Production mode: demo telemetry simulation disabled.")
 
     yield  # Application runs here
 
@@ -90,12 +91,15 @@ async def lifespan(app: FastAPI):
 
     if _telemetry_task is not None:
         _telemetry_task.cancel()
+    if _container_task is not None:
+        _container_task.cancel()
     if _engine_task is not None:
         _engine_task.cancel()
 
-    if _telemetry_task is not None or _engine_task is not None:
+    if _telemetry_task is not None or _container_task is not None or _engine_task is not None:
         await asyncio.gather(
             _telemetry_task or asyncio.sleep(0),
+            _container_task or asyncio.sleep(0),
             _engine_task or asyncio.sleep(0),
             return_exceptions=True,
         )

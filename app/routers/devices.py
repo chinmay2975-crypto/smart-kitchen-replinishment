@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.security import decode_token
+from app.models.orm import DeviceReading
+
+DEFAULT_INITIAL_CAPACITY_GRAMS = 500.0
 
 logger = logging.getLogger("smart_kitchen.devices")
 router = APIRouter(prefix="/api/v1/devices", tags=["devices"])
@@ -226,6 +229,23 @@ async def claim_device(
             "reorder_quantity": req.reorder_quantity,
         },
     )
+
+    # Seed an initial reading representing a freshly-filled container, so the
+    # container visual and background simulation both have a starting point
+    # instead of sitting empty until a real/manual reading arrives.
+    initial_quantity = (
+        float(req.reorder_level) * 2 if req.reorder_level is not None else DEFAULT_INITIAL_CAPACITY_GRAMS
+    )
+    initial_reading = DeviceReading(
+        user_id=user_id,
+        device_id=device_id,
+        feed_id="initial_fill",
+        reading_value=initial_quantity,
+        unit="gram",
+        metadata_json={"source": "claim_device_initial_fill"},
+        created_at=now,
+    )
+    db.add(initial_reading)
     await db.commit()
 
     return DeviceInfoResponse(
@@ -236,6 +256,8 @@ async def claim_device(
         last_seen_at=str(now),
         reorder_level=req.reorder_level,
         reorder_quantity=req.reorder_quantity,
+        current_quantity=initial_quantity,
+        current_quantity_updated_at=str(now),
         mqtt_topic=mqtt_topic,
     )
 
