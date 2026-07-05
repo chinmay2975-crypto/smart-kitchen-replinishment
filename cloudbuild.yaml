@@ -46,3 +46,8 @@ images:
 
 # Configure build timeout
 timeout: 1200s
+
+# Required when the trigger specifies a custom service account without a
+# logs bucket: route build logs to Cloud Logging instead.
+options:
+  logging: CLOUD_LOGGING_ONLY
