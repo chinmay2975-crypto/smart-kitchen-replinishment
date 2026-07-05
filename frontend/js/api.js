@@ -187,6 +187,14 @@ class ApiClient {
         return response;
     }
 
+    async sendDeviceReading(deviceId, readingValue) {
+        const response = await this.request('/api/v1/device/reading', {
+            method: 'POST',
+            body: JSON.stringify({ device_id: deviceId, reading_value: readingValue }),
+        });
+        return response;
+    }
+
     // Profile
     async getProfile() {
         const response = await this.request('/api/v1/profile');

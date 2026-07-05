@@ -222,6 +222,20 @@ async function showDeviceDetail(deviceId) {
                             `).join('') : '<p class="text-gray-400 text-sm">No telemetry data yet. Data will appear as the device receives readings.</p>'}
                         </div>
 
+                        <div class="mb-4 p-4 bg-amber-50 rounded-lg border border-amber-100">
+                            <h4 class="font-semibold text-gray-700 mb-2">Send Test Reading</h4>
+                            <p class="text-xs text-gray-500 mb-2">
+                                Reorder level: ${device.reorder_level ?? 'not set'}.
+                                Submitting a value below it will add an item to your Cart.
+                            </p>
+                            <div class="flex space-x-2">
+                                <input type="number" id="test-reading-value" min="0" step="0.01" placeholder="e.g. 50" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                                <button onclick="sendTestReading('${device.device_id}')" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-700 transition">
+                                    <i class="fas fa-paper-plane mr-1"></i>Send
+                                </button>
+                            </div>
+                        </div>
+
                         <button onclick="generateDemoData('${device.device_id}')" class="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition mb-2">
                             <i class="fas fa-magic mr-1"></i>Generate Demo Data
                         </button>
@@ -244,6 +258,34 @@ async function showDeviceDetail(deviceId) {
         }
     } catch (error) {
         showToast('Failed to load device details', 'error');
+    }
+}
+
+async function sendTestReading(deviceId) {
+    const input = document.getElementById('test-reading-value');
+    const value = parseFloat(input.value);
+
+    if (isNaN(value) || value < 0) {
+        showToast('Enter a valid non-negative reading value', 'error');
+        return;
+    }
+
+    try {
+        const response = await api.sendDeviceReading(deviceId, value);
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast(`Reading ${value} sent successfully!`, 'success');
+            input.value = '';
+            loadCart();
+            closeDetail();
+            showDeviceDetail(deviceId);
+        } else {
+            showToast(data.detail || 'Failed to send reading', 'error');
+        }
+    } catch (error) {
+        console.error('Error sending test reading:', error);
+        showToast('Network error while sending reading', 'error');
     }
 }
 
