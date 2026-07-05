@@ -228,6 +228,13 @@ class ApiClient {
         });
         return response;
     }
+
+    async markOrderDelivered(cartItemId) {
+        const response = await this.request(`/api/v1/cart/${cartItemId}/deliver`, {
+            method: 'POST',
+        });
+        return response;
+    }
 }
 
 // Global API instance

@@ -175,7 +175,7 @@ CREATE TABLE cart_items (
     item_name      VARCHAR(255) NOT NULL,
     quantity       NUMERIC(10,2) NOT NULL,
     status         VARCHAR(20) NOT NULL DEFAULT 'pending_cart'
-                   CHECK (status IN ('pending_cart', 'placed', 'cancelled')),
+                   CHECK (status IN ('pending_cart', 'placed', 'cancelled', 'delivered')),
     estimated_delivery DATE,
     created_at     TIMESTAMPTZ DEFAULT NOW(),
     updated_at     TIMESTAMPTZ DEFAULT NOW()
