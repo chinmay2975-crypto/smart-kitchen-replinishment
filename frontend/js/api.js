@@ -152,12 +152,6 @@ class ApiClient {
         return response;
     }
 
-    // Dashboard
-    async getDashboardData() {
-        const response = await this.request('/api/v1/dashboard-data');
-        return response;
-    }
-
     // Devices
     async getDevices() {
         const response = await this.request('/api/v1/devices/');
