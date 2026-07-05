@@ -49,6 +49,8 @@ class DeviceInfoResponse(BaseModel):
     mqtt_topic: str | None = None
     reorder_level: float | None = None
     reorder_quantity: float | None = None
+    current_quantity: float | None = None
+    current_quantity_updated_at: str | None = None
 
 class DeviceDetailResponse(DeviceInfoResponse):
     household_id: str | None = None
@@ -71,7 +73,13 @@ async def get_devices(
         text("""
             SELECT d.device_id, d.device_name, d.device_type,
                    d.is_online, d.last_seen_at, d.mqtt_topic,
-                   d.reorder_level, d.reorder_quantity
+                   d.reorder_level, d.reorder_quantity,
+                   (SELECT dr.reading_value FROM device_readings dr
+                    WHERE dr.device_id = d.device_id
+                    ORDER BY dr.created_at DESC LIMIT 1) AS current_quantity,
+                   (SELECT dr.created_at FROM device_readings dr
+                    WHERE dr.device_id = d.device_id
+                    ORDER BY dr.created_at DESC LIMIT 1) AS current_quantity_updated_at
             FROM devices d
             JOIN households h ON d.household_id = h.household_id
             JOIN household_members hm ON hm.household_id = h.household_id
@@ -91,6 +99,8 @@ async def get_devices(
             mqtt_topic=row[5],
             reorder_level=float(row[6]) if row[6] is not None else None,
             reorder_quantity=float(row[7]) if row[7] is not None else None,
+            current_quantity=float(row[8]) if row[8] is not None else None,
+            current_quantity_updated_at=str(row[9]) if row[9] is not None else None,
         )
         for row in rows
     ]
@@ -108,7 +118,13 @@ async def get_device_detail(
             SELECT d.device_id, d.device_name, d.device_type,
                    d.is_online, d.last_seen_at, d.mqtt_topic,
                    d.household_id, d.firmware_ver, d.config_json,
-                   d.reorder_level, d.reorder_quantity
+                   d.reorder_level, d.reorder_quantity,
+                   (SELECT dr.reading_value FROM device_readings dr
+                    WHERE dr.device_id = d.device_id
+                    ORDER BY dr.created_at DESC LIMIT 1) AS current_quantity,
+                   (SELECT dr.created_at FROM device_readings dr
+                    WHERE dr.device_id = d.device_id
+                    ORDER BY dr.created_at DESC LIMIT 1) AS current_quantity_updated_at
             FROM devices d
             JOIN households h ON d.household_id = h.household_id
             JOIN household_members hm ON hm.household_id = h.household_id
@@ -156,6 +172,8 @@ async def get_device_detail(
         config_json=row[8] if row[8] else {},
         reorder_level=float(row[9]) if row[9] is not None else None,
         reorder_quantity=float(row[10]) if row[10] is not None else None,
+        current_quantity=float(row[11]) if row[11] is not None else None,
+        current_quantity_updated_at=str(row[12]) if row[12] is not None else None,
         latest_telemetry=latest_telemetry,
     )
 
@@ -220,6 +238,33 @@ async def claim_device(
         reorder_quantity=req.reorder_quantity,
         mqtt_topic=mqtt_topic,
     )
+
+
+@router.delete("/{device_id}", status_code=204)
+async def delete_device(
+    device_id: str,
+    user_id: str = Depends(get_user_id_from_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove a device from the user's household (soft delete)."""
+    result = await db.execute(
+        text("""
+            UPDATE devices d
+            SET deactivated_at = NOW(), is_online = FALSE
+            FROM households h, household_members hm
+            WHERE d.household_id = h.household_id
+              AND hm.household_id = h.household_id
+              AND d.device_id = :did
+              AND hm.user_id = :uid
+              AND d.deactivated_at IS NULL
+            RETURNING d.device_id
+        """),
+        {"did": device_id, "uid": user_id},
+    )
+    if result.first() is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    await db.commit()
+    logger.info("Device %s deactivated by user %s", device_id, user_id)
 
 
 @router.get("/{device_id}/telemetry")

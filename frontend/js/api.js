@@ -195,6 +195,13 @@ class ApiClient {
         return response;
     }
 
+    async deleteDevice(deviceId) {
+        const response = await this.request(`/api/v1/devices/${deviceId}`, {
+            method: 'DELETE',
+        });
+        return response;
+    }
+
     // Profile
     async getProfile() {
         const response = await this.request('/api/v1/profile');

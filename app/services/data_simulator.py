@@ -21,6 +21,8 @@ from app.models.orm import (
 )
 from app.config import get_settings
 from app.core.security import get_password_hash
+from app.models.orm import DeviceReading
+from app.services.cart_service import maybe_trigger_auto_reorder
 
 logger = logging.getLogger("smart_kitchen.simulator")
 settings = get_settings()
@@ -223,8 +225,14 @@ async def _telemetry_tick() -> None:
                     i.device_id,
                     i.quantity,
                     i.unit_type,
-                    i.threshold_min
+                    i.threshold_min,
+                    d.device_name,
+                    d.reorder_level,
+                    d.reorder_quantity,
+                    h.owner_id
                 FROM inventory_current i
+                JOIN devices d ON d.device_id = i.device_id
+                JOIN households h ON h.household_id = i.household_id
                 WHERE i.device_id IS NOT NULL
             """)
         )
@@ -239,11 +247,13 @@ async def _telemetry_tick() -> None:
         for row in rows:
             inventory_id = row[0]
             product_id = row[1]
-            household_id = row[2]
             device_id = row[3]
             current_qty = float(row[4])
             unit_type = row[5]
-            threshold_min = float(row[6]) if row[6] is not None else 0.0
+            device_name = row[7]
+            reorder_level = row[8]
+            reorder_quantity = row[9]
+            owner_id = row[10]
 
             # Random deduction: 100-200 grams
             deduction_grams = random.uniform(100.0, 200.0)
@@ -302,5 +312,32 @@ async def _telemetry_tick() -> None:
                 unit_type,
                 deduction_grams,
             )
+
+            # 3. Mirror the container's remaining weight into device_readings
+            # (grams) so it shows up in the container view and can trigger
+            # the auto-reorder cart, same as a real sensor posting a reading.
+            if owner_id is not None:
+                remaining_grams = new_qty * 1000.0 if unit_type in ("kg", "liter") else new_qty
+                device_reading = DeviceReading(
+                    user_id=owner_id,
+                    device_id=device_id,
+                    feed_id="simulator",
+                    reading_value=round(remaining_grams, 2),
+                    unit="gram",
+                    metadata_json={"source": "telemetry_simulator", "inventory_id": str(inventory_id)},
+                    created_at=now,
+                )
+                session.add(device_reading)
+                await session.flush()
+
+                await maybe_trigger_auto_reorder(
+                    session=session,
+                    device_id=device_id,
+                    user_id=owner_id,
+                    device_name=device_name,
+                    reorder_level=reorder_level,
+                    reorder_quantity=reorder_quantity,
+                    reading_value=round(remaining_grams, 2),
+                )
 
         await session.commit()

@@ -25,6 +25,12 @@ function switchTab(tabName) {
         stopDashboardRefresh();
     }
 
+    if (tabName === 'devices') {
+        startDevicesRefresh();
+    } else {
+        stopDevicesRefresh();
+    }
+
     if (tabName === 'cart') {
         loadCart();
     }

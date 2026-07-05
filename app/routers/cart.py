@@ -49,13 +49,15 @@ async def get_cart(
     user_id: str = Depends(get_user_id_from_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all pending-cart items for the authenticated user."""
+    """List cart items for the authenticated user, both still pending and
+    already placed, so the frontend can show orders dynamically as they move
+    through the flow."""
     result = await db.execute(
         text("""
             SELECT cart_item_id, container_id, item_name, quantity,
                    status, estimated_delivery, created_at
             FROM cart_items
-            WHERE user_id = :uid AND status = 'pending_cart'
+            WHERE user_id = :uid AND status IN ('pending_cart', 'placed')
             ORDER BY created_at DESC
         """),
         {"uid": user_id},

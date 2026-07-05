@@ -1,4 +1,17 @@
 // Devices functions
+let devicesRefreshInterval = null;
+
+function startDevicesRefresh() {
+    if (devicesRefreshInterval) clearInterval(devicesRefreshInterval);
+    devicesRefreshInterval = setInterval(loadDevices, 5000);
+}
+
+function stopDevicesRefresh() {
+    if (devicesRefreshInterval) {
+        clearInterval(devicesRefreshInterval);
+        devicesRefreshInterval = null;
+    }
+}
 
 async function loadDevices() {
     if (!api.isAuthenticated()) {
@@ -39,35 +52,73 @@ function renderDevices(devices) {
         return;
     }
 
-    grid.innerHTML = devices.map(device => `
-        <div class="device-card bg-white rounded-xl shadow-sm p-5 border border-gray-100 cursor-pointer" onclick="showDeviceDetail('${device.device_id}')">
-            <div class="flex items-start justify-between mb-3">
-                <div class="flex items-center space-x-3">
-                    <div class="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-2xl">
-                        📱
+    grid.innerHTML = devices.map(device => createContainerCard(device)).join('');
+}
+
+function createContainerCard(device) {
+    const current = device.current_quantity;
+    const reorderLevel = device.reorder_level;
+    const capacity = reorderLevel ? reorderLevel * 2 : Math.max(current || 0, 100);
+    const fillPct = current != null ? Math.min(100, Math.max(0, (current / capacity) * 100)) : 0;
+    const markerPct = reorderLevel != null ? Math.min(100, (reorderLevel / capacity) * 100) : null;
+    const isLow = reorderLevel != null && current != null && current < reorderLevel;
+    const fillColorClass = isLow ? 'bg-red-400' : 'bg-blue-400';
+    const safeName = device.device_name.replace(/'/g, "\\'");
+
+    return `
+        <div class="device-card bg-white rounded-xl shadow-sm p-5 border border-gray-100 relative">
+            <button onclick="event.stopPropagation(); handleDeleteDevice('${device.device_id}', '${safeName}')" class="absolute top-3 right-3 text-gray-300 hover:text-red-500 transition z-10" title="Delete device">
+                <i class="fas fa-trash"></i>
+            </button>
+            <div class="cursor-pointer" onclick="showDeviceDetail('${device.device_id}')">
+                <div class="flex flex-col items-center mb-3">
+                    <div class="relative w-20 h-28 mb-2">
+                        <div class="absolute inset-0 border-2 border-gray-300 rounded-b-2xl rounded-t-md bg-gray-50 overflow-hidden">
+                            <div class="absolute bottom-0 left-0 w-full ${fillColorClass} transition-all" style="height: ${fillPct}%"></div>
+                            ${markerPct !== null ? `<div class="absolute left-0 w-full border-t-2 border-dashed border-red-500" style="bottom: ${markerPct}%"></div>` : ''}
+                        </div>
                     </div>
-                    <div>
-                        <h4 class="font-semibold text-gray-800">${device.device_name}</h4>
-                        <span class="text-xs text-gray-500">${device.device_type}</span>
-                    </div>
+                    <h4 class="font-semibold text-gray-800 text-center">${device.device_name}</h4>
+                    <span class="text-xs text-gray-500">${device.device_type}</span>
                 </div>
-                <div class="flex items-center space-x-2">
+                <div class="text-center mb-2">
+                    ${current != null
+                        ? `<span class="text-lg font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}">${current.toFixed(0)}g</span>`
+                        : '<span class="text-sm text-gray-400">No readings yet</span>'}
+                    ${reorderLevel != null ? `<div class="text-xs text-gray-400">Reorder below ${reorderLevel}g</div>` : ''}
+                </div>
+                <div class="flex items-center justify-center space-x-2 mb-2">
                     <span class="online-dot ${device.is_online ? 'online' : 'offline'}"></span>
                     <span class="text-xs ${device.is_online ? 'text-emerald-600' : 'text-gray-400'}">
                         ${device.is_online ? 'Online' : 'Offline'}
                     </span>
                 </div>
-            </div>
-            <div class="text-xs text-gray-400 space-y-1">
-                <p><i class="fas fa-tag mr-1"></i>ID: ${device.device_id.substring(0, 8)}...</p>
-                <p><i class="fas fa-comment mr-1"></i>Topic: ${device.mqtt_topic || 'N/A'}</p>
-                ${device.last_seen_at ? `<p><i class="fas fa-clock mr-1"></i>Last seen: ${new Date(device.last_seen_at).toLocaleString()}</p>` : ''}
-            </div>
-            <div class="mt-3 pt-3 border-t border-gray-100 text-center">
-                <span class="text-emerald-600 text-sm font-medium">View Details →</span>
+                <div class="pt-2 border-t border-gray-100 text-center">
+                    <span class="text-emerald-600 text-sm font-medium">View Details →</span>
+                </div>
             </div>
         </div>
-    `).join('');
+    `;
+}
+
+async function handleDeleteDevice(deviceId, deviceName) {
+    if (!confirm(`Delete device "${deviceName}"? This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await api.deleteDevice(deviceId);
+        if (response.ok) {
+            showToast(`Device "${deviceName}" deleted`, 'success');
+            loadDevices();
+        } else {
+            const data = await response.json().catch(() => ({}));
+            showToast(data.detail || 'Failed to delete device', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting device:', error);
+        showToast('Network error while deleting device', 'error');
+    }
 }
 
 function showClaimDeviceModal() {
@@ -178,6 +229,10 @@ async function showDeviceDetail(deviceId) {
                             <div>
                                 <span class="text-xs text-gray-500">Reorder Quantity</span>
                                 <p class="font-medium">${device.reorder_quantity ?? 'Not set'}</p>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500">Current Quantity</span>
+                                <p class="font-medium">${device.current_quantity != null ? `${device.current_quantity.toFixed(0)}g` : 'No data'}</p>
                             </div>
                         </div>
 
