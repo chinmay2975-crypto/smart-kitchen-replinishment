@@ -87,9 +87,6 @@ function renderDashboard(data) {
         grid.innerHTML = inventory.map(item => createInventoryCard(item)).join('');
     }
 
-    // Render inventory chart
-    renderInventoryChart(inventory);
-
     // Render orders table
     const container = document.getElementById('orders-table-container');
     if (orders.length === 0) {
@@ -99,87 +96,17 @@ function renderDashboard(data) {
     }
 }
 
-function renderInventoryChart(inventory) {
-    const chartContainer = document.getElementById('inventory-chart-container');
-    if (!chartContainer) return;
-
-    if (inventory.length === 0) {
-        chartContainer.innerHTML = '<div class="text-center py-8 text-gray-400">No data to display</div>';
-        return;
-    }
-
-    // Destroy existing chart if it exists
-    if (window.inventoryChart) {
-        window.inventoryChart.destroy();
-    }
-
-    const ctx = document.getElementById('inventory-chart');
-    if (!ctx) return;
-
-    const labels = inventory.map(item => item.product_name);
-    const values = inventory.map(item => item.quantity);
-    const colors = inventory.map(item => {
-        if (item.stock_status === 'out_of_stock') return 'rgb(239, 68, 68)';
-        if (item.stock_status === 'low_stock') return 'rgb(234, 179, 8)';
-        return 'rgb(16, 185, 129)';
-    });
-
-    window.inventoryChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Current Quantity',
-                data: values,
-                backgroundColor: colors,
-                borderColor: colors.map(c => c.replace('rgb', 'rgba').replace(')', ', 0.8)')),
-                borderWidth: 1,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const item = inventory[context.dataIndex];
-                            return `${context.parsed.y} ${item.unit_type}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return value;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
 function createInventoryCard(item) {
-    const maxQty = item.threshold_max || 5;
-    const percentage = Math.min((item.quantity / maxQty) * 100, 100);
-    const statusColors = {
-        'ok': 'bg-emerald-500',
-        'low_stock': 'bg-yellow-500',
-        'out_of_stock': 'bg-red-500'
-    };
+    const maxQty = item.threshold_max || Math.max(item.quantity, 1);
+    const fillPct = (item.quantity / maxQty) * 100;
+    const markerPct = item.threshold_min != null ? (item.threshold_min / maxQty) * 100 : null;
+    const isLow = item.stock_status === 'low_stock' || item.stock_status === 'out_of_stock';
     const statusLabels = {
         'ok': 'In Stock',
         'low_stock': 'Low Stock',
         'out_of_stock': 'Out of Stock'
     };
-    const barColor = statusColors[item.stock_status] || 'bg-emerald-500';
+    const uid = item.inventory_id.replace(/[^a-zA-Z0-9]/g, '');
 
     return `
         <div class="inventory-card bg-white rounded-xl shadow-sm p-5 border border-gray-100">
@@ -192,14 +119,12 @@ function createInventoryCard(item) {
                     ${statusLabels[item.stock_status]}
                 </span>
             </div>
-            <div class="mb-2">
-                <div class="flex justify-between text-sm mb-1">
-                    <span class="text-gray-600">${item.quantity} ${item.unit_type}</span>
-                    <span class="text-gray-400">max ${maxQty} ${item.unit_type}</span>
-                </div>
-                <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div class="progress-bar ${barColor} h-2.5 rounded-full" style="width: ${percentage}%"></div>
-                </div>
+            <div class="flex justify-center mb-2">
+                ${buildContainerSvg(uid, fillPct, markerPct, isLow)}
+            </div>
+            <div class="text-center mb-2">
+                <span class="text-lg font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}">${item.quantity} ${item.unit_type}</span>
+                <div class="text-xs text-gray-400">max ${maxQty} ${item.unit_type}</div>
             </div>
             <div class="flex justify-between text-xs text-gray-400 mt-2">
                 <span>Min: ${item.threshold_min || 0} ${item.unit_type}</span>
