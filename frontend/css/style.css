@@ -1,5 +1,25 @@
 /* Custom Styles for Smart Kitchen Dashboard */
 
+/* Container jar visual: the empty (above current level) portion follows
+   the page/system background instead of being hardcoded light-only. */
+.container-empty-fill {
+    fill: #ffffff;
+}
+
+.container-fill-normal {
+    fill: #64748b;
+}
+
+.container-fill-low {
+    fill: #ef4444;
+}
+
+@media (prefers-color-scheme: dark) {
+    .container-empty-fill {
+        fill: #0f172a;
+    }
+}
+
 .tab-btn {
     transition: all 0.2s ease;
 }

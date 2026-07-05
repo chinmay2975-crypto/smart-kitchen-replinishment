@@ -64,28 +64,15 @@ function buildContainerSvg(uid, fillPct, markerPct, isLow) {
     const fillY = bodyBottom - fillHeight;
     const markerY = markerPct !== null ? bodyBottom - bodyHeight * (Math.min(100, markerPct) / 100) : null;
     const borderColor = isLow ? '#ef4444' : '#94a3b8';
+    const fillClass = isLow ? 'container-fill-low' : 'container-fill-normal';
     const ticks = [25, 50, 75].map(p => {
         const y = bodyBottom - bodyHeight * (p / 100);
-        return `<line x1="10" y1="${y}" x2="15" y2="${y}" stroke="#cbd5e1" stroke-width="1.5"/>`;
+        return `<line x1="10" y1="${y}" x2="15" y2="${y}" stroke="${borderColor}" stroke-width="1.5"/>`;
     }).join('');
-
-    // A subtle wavy line right at the fill surface so it reads as loose
-    // material settling rather than a flat, static block of color.
-    const waveTop = fillHeight > 0 ? fillY : null;
 
     return `
         <svg width="96" height="140" viewBox="0 0 96 140" xmlns="http://www.w3.org/2000/svg">
             <defs>
-                <pattern id="grain-${uid}" width="7" height="7" patternUnits="userSpaceOnUse">
-                    <rect width="7" height="7" fill="#ecdfc0"/>
-                    <ellipse cx="2" cy="2" rx="1.4" ry="0.8" fill="#cbb583"/>
-                    <ellipse cx="5" cy="5" rx="1.4" ry="0.8" fill="#cbb583"/>
-                </pattern>
-                <linearGradient id="shade-${uid}" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
-                    <stop offset="15%" stop-color="#ffffff" stop-opacity="0"/>
-                    <stop offset="100%" stop-color="#8a7541" stop-opacity="0.25"/>
-                </linearGradient>
                 <clipPath id="clip-${uid}">
                     <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" rx="6"/>
                 </clipPath>
@@ -95,27 +82,21 @@ function buildContainerSvg(uid, fillPct, markerPct, isLow) {
             <rect x="30" y="0" width="36" height="8" rx="3" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1"/>
             <rect x="17" y="6" width="62" height="14" rx="4" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1"/>
 
-            <!-- body outline -->
-            <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" rx="6" fill="#f8fafc" stroke="${borderColor}" stroke-width="2"/>
-
-            <!-- fill -->
+            <!-- body: empty portion (above level) follows the page background,
+                 filled portion (at/below level) is a solid shaded color -->
             <g clip-path="url(#clip-${uid})">
-                <rect x="11" y="${fillY}" width="74" height="${fillHeight}" fill="url(#grain-${uid})"/>
-                <rect x="11" y="${fillY}" width="74" height="${fillHeight}" fill="url(#shade-${uid})"/>
-                ${waveTop !== null ? `<path d="M 11 ${waveTop} Q 28 ${waveTop - 2.5} 48 ${waveTop} T 85 ${waveTop}" fill="none" stroke="#8a7541" stroke-opacity="0.4" stroke-width="1.5"/>` : ''}
+                <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" class="container-empty-fill"/>
+                <rect x="11" y="${fillY}" width="74" height="${fillHeight}" class="${fillClass}"/>
             </g>
 
-            <!-- glass highlight for a less flat look -->
-            <rect x="15" y="${bodyTop + 4}" width="6" height="${bodyHeight - 8}" rx="3" fill="#ffffff" opacity="0.25"/>
+            <!-- body outline -->
+            <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" rx="6" fill="none" stroke="${borderColor}" stroke-width="2"/>
 
             <!-- measurement ticks -->
             ${ticks}
 
             <!-- reorder marker -->
             ${markerY !== null ? `<line x1="11" y1="${markerY}" x2="85" y2="${markerY}" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4 2"/>` : ''}
-
-            <!-- re-draw outline on top so the fill/clip doesn't bleed over the border -->
-            <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" rx="6" fill="none" stroke="${borderColor}" stroke-width="2"/>
         </svg>
     `;
 }
