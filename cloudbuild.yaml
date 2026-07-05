@@ -15,10 +15,12 @@ steps:
       - 'gcr.io/$PROJECT_ID/smart-kitchen-api:$SHORT_SHA'
       - '.'
 
-  # Step 2: Push the Docker image to Google Container Registry
+  # Step 2: Push both tags to Google Container Registry (the deploy step
+  # below needs the $SHORT_SHA tag, not just latest)
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
+      - '--all-tags'
       - 'gcr.io/$PROJECT_ID/smart-kitchen-api'
 
   # Step 3: Deploy to Cloud Run
