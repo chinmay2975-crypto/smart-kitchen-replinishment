@@ -55,32 +55,79 @@ function renderDevices(devices) {
     grid.innerHTML = devices.map(device => createContainerCard(device)).join('');
 }
 
+function buildContainerSvg(uid, fillPct, markerPct, isLow) {
+    // Body interior spans y=22..130 (height 108) inside a 96x140 viewBox.
+    const bodyTop = 22;
+    const bodyHeight = 108;
+    const bodyBottom = bodyTop + bodyHeight;
+    const fillHeight = bodyHeight * (Math.max(0, Math.min(100, fillPct)) / 100);
+    const fillY = bodyBottom - fillHeight;
+    const markerY = markerPct !== null ? bodyBottom - bodyHeight * (Math.min(100, markerPct) / 100) : null;
+    const borderColor = isLow ? '#ef4444' : '#94a3b8';
+    const ticks = [25, 50, 75].map(p => {
+        const y = bodyBottom - bodyHeight * (p / 100);
+        return `<line x1="10" y1="${y}" x2="15" y2="${y}" stroke="#cbd5e1" stroke-width="1.5"/>`;
+    }).join('');
+
+    return `
+        <svg width="96" height="140" viewBox="0 0 96 140" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <pattern id="grain-${uid}" width="7" height="7" patternUnits="userSpaceOnUse">
+                    <rect width="7" height="7" fill="#ecdfc0"/>
+                    <ellipse cx="2" cy="2" rx="1.4" ry="0.8" fill="#cbb583"/>
+                    <ellipse cx="5" cy="5" rx="1.4" ry="0.8" fill="#cbb583"/>
+                </pattern>
+                <clipPath id="clip-${uid}">
+                    <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" rx="6"/>
+                </clipPath>
+            </defs>
+
+            <!-- lid -->
+            <rect x="30" y="0" width="36" height="8" rx="3" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1"/>
+            <rect x="17" y="6" width="62" height="14" rx="4" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1"/>
+
+            <!-- body outline -->
+            <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" rx="6" fill="#f8fafc" stroke="${borderColor}" stroke-width="2"/>
+
+            <!-- fill -->
+            <g clip-path="url(#clip-${uid})">
+                <rect x="11" y="${fillY}" width="74" height="${fillHeight}" fill="url(#grain-${uid})"/>
+            </g>
+
+            <!-- measurement ticks -->
+            ${ticks}
+
+            <!-- reorder marker -->
+            ${markerY !== null ? `<line x1="11" y1="${markerY}" x2="85" y2="${markerY}" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4 2"/>` : ''}
+
+            <!-- re-draw outline on top so the fill/clip doesn't bleed over the border -->
+            <rect x="11" y="${bodyTop}" width="74" height="${bodyHeight}" rx="6" fill="none" stroke="${borderColor}" stroke-width="2"/>
+        </svg>
+    `;
+}
+
 function createContainerCard(device) {
     const current = device.current_quantity;
     const reorderLevel = device.reorder_level;
     const capacity = reorderLevel ? reorderLevel * 2 : Math.max(current || 0, 100);
-    const fillPct = current != null ? Math.min(100, Math.max(0, (current / capacity) * 100)) : 0;
-    const markerPct = reorderLevel != null ? Math.min(100, (reorderLevel / capacity) * 100) : null;
+    const fillPct = current != null ? (current / capacity) * 100 : 0;
+    const markerPct = reorderLevel != null ? (reorderLevel / capacity) * 100 : null;
     const isLow = reorderLevel != null && current != null && current < reorderLevel;
-    const fillColorClass = isLow ? 'bg-red-400' : 'bg-blue-400';
     const safeName = device.device_name.replace(/'/g, "\\'");
+    const uid = device.device_id.replace(/[^a-zA-Z0-9]/g, '');
 
     return `
         <div class="device-card bg-white rounded-xl shadow-sm p-5 border border-gray-100 relative">
             <button onclick="event.stopPropagation(); handleDeleteDevice('${device.device_id}', '${safeName}')" class="absolute top-3 right-3 text-gray-300 hover:text-red-500 transition z-10" title="Delete device">
                 <i class="fas fa-trash"></i>
             </button>
+            ${isLow ? '<span class="absolute top-3 left-3 bg-red-100 text-red-600 text-xs font-semibold px-2 py-0.5 rounded-full z-10">Low</span>' : ''}
             <div class="cursor-pointer" onclick="showDeviceDetail('${device.device_id}')">
-                <div class="flex flex-col items-center mb-3">
-                    <div class="relative w-20 h-28 mb-2">
-                        <div class="absolute inset-0 border-2 border-gray-300 rounded-b-2xl rounded-t-md bg-gray-50 overflow-hidden">
-                            <div class="absolute bottom-0 left-0 w-full ${fillColorClass} transition-all" style="height: ${fillPct}%"></div>
-                            ${markerPct !== null ? `<div class="absolute left-0 w-full border-t-2 border-dashed border-red-500" style="bottom: ${markerPct}%"></div>` : ''}
-                        </div>
-                    </div>
-                    <h4 class="font-semibold text-gray-800 text-center">${device.device_name}</h4>
-                    <span class="text-xs text-gray-500">${device.device_type}</span>
+                <div class="flex justify-center mb-2 mt-2">
+                    ${buildContainerSvg(uid, fillPct, markerPct, isLow)}
                 </div>
+                <h4 class="font-semibold text-gray-800 text-center">${device.device_name}</h4>
+                <span class="text-xs text-gray-500 block text-center mb-2">${device.device_type}</span>
                 <div class="text-center mb-2">
                     ${current != null
                         ? `<span class="text-lg font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}">${current.toFixed(0)}g</span>`
