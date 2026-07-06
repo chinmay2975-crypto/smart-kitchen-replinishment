@@ -1,5 +1,14 @@
 // Main Application Controller
 
+// Register service worker for PWA installability (app-shell caching only,
+// never caches /api/ requests — see sw.js).
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .catch((err) => console.warn('Service worker registration failed:', err));
+    });
+}
+
 function switchTab(tabName) {
     // Update tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
