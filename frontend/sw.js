@@ -3,7 +3,7 @@
 // any /api/ calls, since the app is almost entirely live-data driven and a
 // stale cached API response would be a worse experience than no offline
 // support at all.
-const CACHE_VERSION = 'smart-kitchen-v1'; // bump when shell files change
+const CACHE_VERSION = 'smart-kitchen-v2'; // bump when shell files change
 
 const APP_SHELL = [
     '/',
