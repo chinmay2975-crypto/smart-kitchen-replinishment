@@ -82,6 +82,7 @@ class Device(Base):
     deactivated_at = mapped_column(DateTime(timezone=True), nullable=True)
     reorder_level = mapped_column(Numeric(10, 2), nullable=True)
     reorder_quantity = mapped_column(Numeric(10, 2), nullable=True)
+    battery_level = mapped_column(Numeric(5, 2), nullable=True, default=100)
 
 
 class ProductCatalog(Base):

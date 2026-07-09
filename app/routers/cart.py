@@ -89,28 +89,56 @@ async def checkout_cart(
     user_id: str = Depends(get_user_id_from_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """Place all pending-cart items for the user, assigning a mock estimated delivery date."""
+    """
+    Check out all pending-cart items for the user. Containers are
+    auto-replenished immediately on checkout (no separate manual "mark
+    delivered" step needed) by writing a fresh device_reading restocked to
+    reorder_level + reorder_quantity, as a real refill would report.
+    """
     estimated_delivery = (datetime.now(timezone.utc) + timedelta(days=MOCK_DELIVERY_LEAD_DAYS)).date()
 
-    result = await db.execute(
+    items_result = await db.execute(
         text("""
-            UPDATE cart_items
-            SET status = 'placed',
-                estimated_delivery = :delivery,
-                updated_at = NOW()
-            WHERE user_id = :uid AND status = 'pending_cart'
-            RETURNING cart_item_id
+            SELECT c.cart_item_id, c.container_id, c.quantity, d.reorder_level, d.reorder_quantity
+            FROM cart_items c
+            JOIN devices d ON d.device_id = c.container_id
+            WHERE c.user_id = :uid AND c.status = 'pending_cart'
         """),
-        {"uid": user_id, "delivery": estimated_delivery},
+        {"uid": user_id},
     )
-    placed_ids = result.fetchall()
+    items = items_result.fetchall()
+
+    for cart_item_id, container_id, cart_quantity, reorder_level, reorder_quantity in items:
+        restock_amount = float(reorder_quantity) if reorder_quantity is not None else float(cart_quantity)
+        new_quantity = float(reorder_level or 0) + restock_amount
+
+        db.add(DeviceReading(
+            user_id=user_id,
+            device_id=container_id,
+            feed_id="checkout_auto_replenish",
+            reading_value=new_quantity,
+            unit="gram",
+            metadata_json={"source": "checkout_auto_replenish", "cart_item_id": str(cart_item_id)},
+        ))
+
+        await db.execute(
+            text("""
+                UPDATE cart_items
+                SET status = 'delivered',
+                    estimated_delivery = :delivery,
+                    updated_at = NOW()
+                WHERE cart_item_id = :cid
+            """),
+            {"cid": cart_item_id, "delivery": estimated_delivery},
+        )
+
     await db.commit()
 
-    logger.info("Checked out %d cart item(s) for user %s", len(placed_ids), user_id)
+    logger.info("Checked out and auto-replenished %d cart item(s) for user %s", len(items), user_id)
 
     return CheckoutResponse(
-        message="Cart checked out successfully",
-        items_placed=len(placed_ids),
+        message="Cart checked out and containers replenished",
+        items_placed=len(items),
         estimated_delivery=str(estimated_delivery),
     )
 

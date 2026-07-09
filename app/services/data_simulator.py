@@ -248,6 +248,7 @@ async def _container_devices_tick() -> None:
                     d.device_name,
                     d.reorder_level,
                     d.reorder_quantity,
+                    d.battery_level,
                     h.owner_id,
                     (SELECT dr.reading_value FROM device_readings dr
                      WHERE dr.device_id = d.device_id
@@ -267,9 +268,18 @@ async def _container_devices_tick() -> None:
         now = datetime.now(timezone.utc)
 
         for row in rows:
-            device_id, device_name, reorder_level, reorder_quantity, owner_id, last_reading = row
+            device_id, device_name, reorder_level, reorder_quantity, battery_level, owner_id, last_reading = row
             if owner_id is None:
                 continue
+
+            # Simulated battery drain: small random dip per tick, floored so
+            # it never reads dead (no real hardware to actually replace yet).
+            current_battery = float(battery_level) if battery_level is not None else 100.0
+            new_battery = max(round(current_battery - random.uniform(0.05, 0.3), 2), 5.0)
+            await session.execute(
+                text("UPDATE devices SET battery_level = :battery WHERE device_id = :did"),
+                {"battery": new_battery, "did": device_id},
+            )
 
             if reorder_level is not None and reorder_quantity is not None:
                 capacity = float(reorder_level) + float(reorder_quantity)

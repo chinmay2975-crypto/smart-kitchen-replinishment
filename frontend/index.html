@@ -121,7 +121,13 @@
                             <span class="text-xl font-bold text-gray-800">Smart Kitchen</span>
                         </div>
                         <div class="flex items-center space-x-4">
-                            <span id="user-name-display" class="text-gray-600 text-sm"></span>
+                            <div class="flex flex-col items-end">
+                                <span id="user-name-display" class="text-gray-600 text-sm"></span>
+                                <button onclick="switchTab('cart')" class="relative text-emerald-600 text-xs font-medium hover:text-emerald-700 hover:underline transition">
+                                    <i class="fas fa-shopping-cart mr-1"></i>Cart
+                                    <span id="header-cart-count-badge" class="hidden ml-1 bg-red-500 text-white text-[10px] rounded-full px-1.5 py-0.5 align-top">0</span>
+                                </button>
+                            </div>
                             <button onclick="handleLogout()" class="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
                                 <i class="fas fa-sign-out-alt mr-1"></i>Logout
                             </button>

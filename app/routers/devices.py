@@ -1,4 +1,5 @@
 import logging
+import random
 import uuid
 from datetime import datetime, timezone
 
@@ -54,6 +55,7 @@ class DeviceInfoResponse(BaseModel):
     reorder_quantity: float | None = None
     current_quantity: float | None = None
     current_quantity_updated_at: str | None = None
+    battery_level: float | None = None
 
 class DeviceDetailResponse(DeviceInfoResponse):
     household_id: str | None = None
@@ -76,7 +78,7 @@ async def get_devices(
         text("""
             SELECT d.device_id, d.device_name, d.device_type,
                    d.is_online, d.last_seen_at, d.mqtt_topic,
-                   d.reorder_level, d.reorder_quantity,
+                   d.reorder_level, d.reorder_quantity, d.battery_level,
                    (SELECT dr.reading_value FROM device_readings dr
                     WHERE dr.device_id = d.device_id
                     ORDER BY dr.created_at DESC LIMIT 1) AS current_quantity,
@@ -102,8 +104,9 @@ async def get_devices(
             mqtt_topic=row[5],
             reorder_level=float(row[6]) if row[6] is not None else None,
             reorder_quantity=float(row[7]) if row[7] is not None else None,
-            current_quantity=float(row[8]) if row[8] is not None else None,
-            current_quantity_updated_at=str(row[9]) if row[9] is not None else None,
+            battery_level=float(row[8]) if row[8] is not None else None,
+            current_quantity=float(row[9]) if row[9] is not None else None,
+            current_quantity_updated_at=str(row[10]) if row[10] is not None else None,
         )
         for row in rows
     ]
@@ -121,7 +124,7 @@ async def get_device_detail(
             SELECT d.device_id, d.device_name, d.device_type,
                    d.is_online, d.last_seen_at, d.mqtt_topic,
                    d.household_id, d.firmware_ver, d.config_json,
-                   d.reorder_level, d.reorder_quantity,
+                   d.reorder_level, d.reorder_quantity, d.battery_level,
                    (SELECT dr.reading_value FROM device_readings dr
                     WHERE dr.device_id = d.device_id
                     ORDER BY dr.created_at DESC LIMIT 1) AS current_quantity,
@@ -175,8 +178,9 @@ async def get_device_detail(
         config_json=row[8] if row[8] else {},
         reorder_level=float(row[9]) if row[9] is not None else None,
         reorder_quantity=float(row[10]) if row[10] is not None else None,
-        current_quantity=float(row[11]) if row[11] is not None else None,
-        current_quantity_updated_at=str(row[12]) if row[12] is not None else None,
+        battery_level=float(row[11]) if row[11] is not None else None,
+        current_quantity=float(row[12]) if row[12] is not None else None,
+        current_quantity_updated_at=str(row[13]) if row[13] is not None else None,
         latest_telemetry=latest_telemetry,
     )
 
@@ -208,6 +212,11 @@ async def claim_device(
     base_topic = f"kitchen/{req.device_name.lower().replace(' ', '_')}"
     mqtt_topic = f"{base_topic}_{uuid.uuid4().hex[:8]}"
 
+    # No real hardware reports battery yet, so a freshly claimed device
+    # starts with a simulated near-full battery (85-100%), decayed slowly
+    # over time by the background container simulator.
+    initial_battery = round(random.uniform(85.0, 100.0), 2)
+
     # Create new device
     device_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
@@ -215,9 +224,9 @@ async def claim_device(
         text("""
             INSERT INTO devices (device_id, household_id, device_name, device_type,
                                mqtt_topic, is_online, last_seen_at, registered_at,
-                               reorder_level, reorder_quantity)
+                               reorder_level, reorder_quantity, battery_level)
             VALUES (:did, :hid, :dname, 'smart_scale', :topic, TRUE, :now, :now,
-                    :reorder_level, :reorder_quantity)
+                    :reorder_level, :reorder_quantity, :battery_level)
         """),
         {
             "did": device_id,
@@ -227,6 +236,7 @@ async def claim_device(
             "now": now,
             "reorder_level": req.reorder_level,
             "reorder_quantity": req.reorder_quantity,
+            "battery_level": initial_battery,
         },
     )
 
@@ -261,6 +271,7 @@ async def claim_device(
         last_seen_at=str(now),
         reorder_level=req.reorder_level,
         reorder_quantity=req.reorder_quantity,
+        battery_level=initial_battery,
         current_quantity=initial_quantity,
         current_quantity_updated_at=str(now),
         mqtt_topic=mqtt_topic,

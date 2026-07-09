@@ -28,14 +28,16 @@ function renderCart(items) {
     const deliveredItems = items.filter(item => item.status === 'delivered');
 
     const badge = document.getElementById('cart-count-badge');
-    if (badge) {
+    const headerBadge = document.getElementById('header-cart-count-badge');
+    [badge, headerBadge].forEach(b => {
+        if (!b) return;
         if (pendingItems.length > 0) {
-            badge.textContent = pendingItems.length;
-            badge.classList.remove('hidden');
+            b.textContent = pendingItems.length;
+            b.classList.remove('hidden');
         } else {
-            badge.classList.add('hidden');
+            b.classList.add('hidden');
         }
-    }
+    });
 
     const pendingContainer = document.getElementById('cart-items-container');
     const placedContainer = document.getElementById('cart-placed-container');
@@ -154,8 +156,10 @@ async function handleCheckoutCart() {
         const data = await response.json();
 
         if (response.ok) {
-            showToast(`${data.items_placed} item(s) placed! Estimated delivery: ${data.estimated_delivery}`, 'success');
+            showToast(`${data.items_placed} item(s) checked out and container(s) replenished!`, 'success');
             loadCart();
+            loadDevices();
+            loadDashboard();
         } else {
             showToast(data.detail || data.message || 'Checkout failed', 'error');
         }

@@ -125,6 +125,19 @@ function createContainerCard(device) {
     const safeName = device.device_name.replace(/'/g, "\\'");
     const uid = device.device_id.replace(/[^a-zA-Z0-9]/g, '');
 
+    const battery = device.battery_level;
+    let batteryIcon = 'fa-battery-full';
+    let batteryColor = 'text-emerald-600';
+    if (battery != null) {
+        if (battery <= 15) { batteryIcon = 'fa-battery-empty'; batteryColor = 'text-red-500'; }
+        else if (battery <= 40) { batteryIcon = 'fa-battery-quarter'; batteryColor = 'text-amber-500'; }
+        else if (battery <= 70) { batteryIcon = 'fa-battery-half'; batteryColor = 'text-gray-500'; }
+        else { batteryIcon = 'fa-battery-full'; batteryColor = 'text-emerald-600'; }
+    }
+    const lastReadingLabel = device.current_quantity_updated_at
+        ? new Date(device.current_quantity_updated_at).toLocaleString()
+        : 'No readings yet';
+
     return `
         <div class="device-card bg-white rounded-xl shadow-sm p-5 border border-gray-100 relative">
             <button onclick="event.stopPropagation(); handleDeleteDevice('${device.device_id}', '${safeName}')" class="absolute top-3 right-3 text-gray-300 hover:text-red-500 transition z-10" title="Delete device">
@@ -148,6 +161,13 @@ function createContainerCard(device) {
                     <span class="text-xs ${device.is_online ? 'text-emerald-600' : 'text-gray-400'}">
                         ${device.is_online ? 'Online' : 'Offline'}
                     </span>
+                    ${battery != null ? `
+                    <span class="text-xs ${batteryColor} flex items-center" title="Battery level">
+                        <i class="fas ${batteryIcon} mr-1"></i>${battery.toFixed(0)}%
+                    </span>` : ''}
+                </div>
+                <div class="text-center text-[11px] text-gray-400 mb-2">
+                    <i class="fas fa-clock mr-1"></i>Last reading: ${lastReadingLabel}
                 </div>
                 <div class="pt-2 border-t border-gray-100 text-center">
                     <span class="text-emerald-600 text-sm font-medium">View Details →</span>
@@ -290,6 +310,14 @@ async function showDeviceDetail(deviceId) {
                             <div>
                                 <span class="text-xs text-gray-500">Current Quantity</span>
                                 <p class="font-medium">${device.current_quantity != null ? `${device.current_quantity.toFixed(0)}g` : 'No data'}</p>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500">Battery Level</span>
+                                <p class="font-medium">${device.battery_level != null ? `${device.battery_level.toFixed(0)}%` : 'N/A'}</p>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500">Last Reading</span>
+                                <p class="font-medium">${device.current_quantity_updated_at ? new Date(device.current_quantity_updated_at).toLocaleString() : 'No readings yet'}</p>
                             </div>
                         </div>
 
