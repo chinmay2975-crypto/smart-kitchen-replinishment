@@ -39,7 +39,7 @@ steps:
       - '--cpu=1'
       - '--min-instances=1'
       - '--max-instances=10'
-      - '--set-env-vars=DATABASE_URL=postgresql+asyncpg://postgres:Chinmay2005%40@db.eqjianefzeaighbjegye.supabase.co:6543/postgres?ssl=require,SUPABASE_URL=https://eqjianefzeaighbjegye.supabase.co,SECRET_KEY=d85669c6c3e74554476c5ec4d4407ae9cba3b963e8e8d138ea59c22abdbc2e7c,SERVER_TOKEN=smart_kitchen_server_token_2024,ENABLE_SIMULATION=false,EVALUATION_INTERVAL_SECONDS=30,TELEMETRY_INTERVAL_SECONDS=10'
+      - '--set-env-vars=DATABASE_URL=postgresql+asyncpg://postgres:Chinmay2005%40@db.eqjianefzeaighbjegye.supabase.co:6543/postgres?ssl=require,SUPABASE_URL=https://eqjianefzeaighbjegye.supabase.co,SECRET_KEY=d85669c6c3e74554476c5ec4d4407ae9cba3b963e8e8d138ea59c22abdbc2e7c,SERVER_TOKEN=smart_kitchen_server_token_2024,ENABLE_SIMULATION=false,EVALUATION_INTERVAL_SECONDS=120,TELEMETRY_INTERVAL_SECONDS=60'
 
 # Store images in Google Container Registry
 images:
