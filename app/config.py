@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres.eqjianefzeaighbjegye:Chinmay2005%40@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?ssl=require"
     supabase_url: str = "https://eqjianefzeaighbjegye.supabase.co"
-    evaluation_interval_seconds: int = 30
-    telemetry_interval_seconds: int = 10
+    evaluation_interval_seconds: int = 120
+    telemetry_interval_seconds: int = 60
     secret_key: str = "d85669c6c3e74554476c5ec4d4407ae9cba3b963e8e8d138ea59c22abdbc2e7c"
     server_token: str = "smart_kitchen_server_token_2024"
     enable_simulation: bool = False
