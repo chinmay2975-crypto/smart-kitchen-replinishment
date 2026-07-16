@@ -39,8 +39,8 @@ steps:
       - '--cpu=1'
       - '--min-instances=1'
       - '--max-instances=10'
-      - '--set-env-vars=SUPABASE_URL=https://eqjianefzeaighbjegye.supabase.co,ENABLE_SIMULATION=false,EVALUATION_INTERVAL_SECONDS=120,TELEMETRY_INTERVAL_SECONDS=60'
-      - '--update-secrets=DATABASE_URL=smart-kitchen-database-url:latest,SECRET_KEY=smart-kitchen-secret-key:latest,SERVER_TOKEN=smart-kitchen-server-token:latest'
+      - '--set-env-vars=SUPABASE_URL=https://eqjianefzeaighbjegye.supabase.co,ENABLE_SIMULATION=false,EVALUATION_INTERVAL_SECONDS=120,TELEMETRY_INTERVAL_SECONDS=60,ZOHO_ENABLED=true,ZOHO_API_BASE_URL=https://www.zohoapis.in,ZOHO_ACCOUNTS_BASE_URL=https://accounts.zoho.in'
+      - '--update-secrets=DATABASE_URL=smart-kitchen-database-url:latest,SECRET_KEY=smart-kitchen-secret-key:latest,SERVER_TOKEN=smart-kitchen-server-token:latest,ZOHO_CLIENT_ID=smart-kitchen-zoho-client-id:latest,ZOHO_CLIENT_SECRET=smart-kitchen-zoho-client-secret:latest,ZOHO_REFRESH_TOKEN=smart-kitchen-zoho-refresh-token:latest,ZOHO_ORGANIZATION_ID=smart-kitchen-zoho-organization-id:latest,ZOHO_CUSTOMER_ID=smart-kitchen-zoho-customer-id:latest'
 
 # Store images in Google Container Registry
 images:

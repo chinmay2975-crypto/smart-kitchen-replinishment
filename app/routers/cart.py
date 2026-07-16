@@ -2,17 +2,20 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.core.security import decode_token
 from app.models.orm import DeviceReading
+from app.services.zoho_service import sync_checkout_to_zoho
 
 logger = logging.getLogger("smart_kitchen.cart")
 router = APIRouter(prefix="/api/v1/cart", tags=["cart"])
+settings = get_settings()
 
 MOCK_DELIVERY_LEAD_DAYS = 3
 
@@ -36,6 +39,7 @@ class CartItemResponse(BaseModel):
     quantity: float
     status: str
     estimated_delivery: Optional[str] = None
+    zoho_sales_order_number: Optional[str] = None
     created_at: str
 
 
@@ -62,7 +66,7 @@ async def get_cart(
     result = await db.execute(
         text("""
             SELECT cart_item_id, container_id, item_name, quantity,
-                   status, estimated_delivery, created_at
+                   status, estimated_delivery, zoho_sales_order_number, created_at
             FROM cart_items
             WHERE user_id = :uid AND status IN ('pending_cart', 'placed', 'delivered')
             ORDER BY created_at DESC
@@ -78,7 +82,8 @@ async def get_cart(
             quantity=float(row[3]),
             status=row[4],
             estimated_delivery=str(row[5]) if row[5] else None,
-            created_at=str(row[6]),
+            zoho_sales_order_number=row[6],
+            created_at=str(row[7]),
         )
         for row in rows
     ]
@@ -86,6 +91,7 @@ async def get_cart(
 
 @router.post("/checkout", response_model=CheckoutResponse)
 async def checkout_cart(
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_user_id_from_token),
     db: AsyncSession = Depends(get_db),
 ):
@@ -94,12 +100,16 @@ async def checkout_cart(
     auto-replenished immediately on checkout (no separate manual "mark
     delivered" step needed) by writing a fresh device_reading restocked to
     reorder_level + reorder_quantity, as a real refill would report.
+
+    If ZOHO_ENABLED, a Zoho Inventory Sales Order is also created for this
+    checkout — done via BackgroundTasks so the response below is returned
+    immediately without waiting on the external Zoho API call.
     """
     estimated_delivery = (datetime.now(timezone.utc) + timedelta(days=MOCK_DELIVERY_LEAD_DAYS)).date()
 
     items_result = await db.execute(
         text("""
-            SELECT c.cart_item_id, c.container_id, c.quantity, d.reorder_level, d.reorder_quantity
+            SELECT c.cart_item_id, c.container_id, c.item_name, c.quantity, d.reorder_level, d.reorder_quantity
             FROM cart_items c
             JOIN devices d ON d.device_id = c.container_id
             WHERE c.user_id = :uid AND c.status = 'pending_cart'
@@ -108,7 +118,9 @@ async def checkout_cart(
     )
     items = items_result.fetchall()
 
-    for cart_item_id, container_id, cart_quantity, reorder_level, reorder_quantity in items:
+    checkout_items_for_zoho = []
+
+    for cart_item_id, container_id, item_name, cart_quantity, reorder_level, reorder_quantity in items:
         restock_amount = float(reorder_quantity) if reorder_quantity is not None else float(cart_quantity)
         new_quantity = float(reorder_level or 0) + restock_amount
 
@@ -132,9 +144,18 @@ async def checkout_cart(
             {"cid": cart_item_id, "delivery": estimated_delivery},
         )
 
+        checkout_items_for_zoho.append({
+            "cart_item_id": str(cart_item_id),
+            "item_name": item_name,
+            "quantity": float(cart_quantity),
+        })
+
     await db.commit()
 
     logger.info("Checked out and auto-replenished %d cart item(s) for user %s", len(items), user_id)
+
+    if settings.zoho_enabled and checkout_items_for_zoho:
+        background_tasks.add_task(sync_checkout_to_zoho, checkout_items_for_zoho, user_id)
 
     return CheckoutResponse(
         message="Cart checked out and containers replenished",

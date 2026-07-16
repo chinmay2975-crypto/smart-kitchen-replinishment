@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     server_token: str = ""
     enable_simulation: bool = False
 
+    zoho_enabled: bool = False
+    zoho_client_id: str = ""
+    zoho_client_secret: str = ""
+    zoho_refresh_token: str = ""
+    zoho_organization_id: str = ""
+    zoho_customer_id: str = ""
+    zoho_api_base_url: str = "https://www.zohoapis.com"
+    zoho_accounts_base_url: str = "https://accounts.zoho.com"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
