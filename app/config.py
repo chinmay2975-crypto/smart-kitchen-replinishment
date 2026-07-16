@@ -2,12 +2,16 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+asyncpg://postgres.eqjianefzeaighbjegye:Chinmay2005%40@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?ssl=require"
+    # No real secrets as defaults — these must come from .env locally or
+    # from Cloud Run env vars in production. Empty-string defaults mean a
+    # misconfigured deployment fails loudly (auth breaks) instead of
+    # silently running with a hardcoded, publicly-known credential.
+    database_url: str = ""
     supabase_url: str = "https://eqjianefzeaighbjegye.supabase.co"
     evaluation_interval_seconds: int = 120
     telemetry_interval_seconds: int = 60
-    secret_key: str = "d85669c6c3e74554476c5ec4d4407ae9cba3b963e8e8d138ea59c22abdbc2e7c"
-    server_token: str = "smart_kitchen_server_token_2024"
+    secret_key: str = ""
+    server_token: str = ""
     enable_simulation: bool = False
 
     class Config:
