@@ -39,7 +39,10 @@ async def get_zoho_access_token() -> str:
         return _cached_access_token
 
     url = f"{settings.zoho_accounts_base_url}{_TOKEN_URL_PATH}"
-    params = {
+    # Sent as a form-encoded POST body, not query params — httpx logs full
+    # request URLs (including query strings) at INFO level, which would
+    # otherwise leak the refresh token and client secret into Cloud Logging.
+    form_data = {
         "refresh_token": settings.zoho_refresh_token,
         "client_id": settings.zoho_client_id,
         "client_secret": settings.zoho_client_secret,
@@ -47,7 +50,7 @@ async def get_zoho_access_token() -> str:
     }
 
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.post(url, params=params)
+        response = await client.post(url, data=form_data)
     response.raise_for_status()
     data = response.json()
     access_token = data["access_token"]
