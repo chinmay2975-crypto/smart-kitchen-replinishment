@@ -49,6 +49,26 @@ async def test_token_caching():
     print("PASS: token caching (second call served from cache, 1 HTTP call total)")
 
 
+def test_build_sales_order_payload():
+    """reference_number/notes carry the user identity; rate is included
+    only when unit_price was set, omitted (not zeroed) otherwise."""
+    payload = zoho_service.build_sales_order_payload(
+        [
+            {"item_name": "Rice 5kg Refill", "quantity": 2, "unit_price": 250.5},
+            {"item_name": "Oil 1L Refill", "quantity": 1, "unit_price": None},
+        ],
+        user_id="user-123",
+        user_name="Chinmay Potdar",
+    )
+
+    assert payload["reference_number"] == "Chinmay Potdar"
+    assert payload["notes"] == "App user_id: user-123"
+    assert payload["line_items"][0] == {"name": "Rice 5kg Refill", "quantity": 2, "rate": 250.5}
+    assert payload["line_items"][1] == {"name": "Oil 1L Refill", "quantity": 1}
+    assert "rate" not in payload["line_items"][1]
+    print("PASS: build_sales_order_payload (reference_number/notes/rate shape)")
+
+
 async def test_sales_order_creation():
     """create_zoho_sales_order posts the payload and returns Zoho's response."""
     zoho_service._cached_access_token = "cached-token"
@@ -58,7 +78,9 @@ async def test_sales_order_creation():
         mock_post.return_value = _fake_salesorder_response()
 
         payload = zoho_service.build_sales_order_payload(
-            [{"item_name": "Rice 5kg Refill", "quantity": 2}]
+            [{"item_name": "Rice 5kg Refill", "quantity": 2, "unit_price": 250.5}],
+            user_id="user-123",
+            user_name="Chinmay Potdar",
         )
         result = await zoho_service.create_zoho_sales_order(payload)
 
@@ -103,6 +125,7 @@ async def test_live_smoke():
 
 async def main():
     await test_token_caching()
+    test_build_sales_order_payload()
     await test_sales_order_creation()
     await test_429_retry()
     await test_live_smoke()

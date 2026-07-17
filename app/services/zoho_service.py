@@ -61,14 +61,28 @@ async def get_zoho_access_token() -> str:
     return access_token
 
 
-def build_sales_order_payload(items: list[dict]) -> dict:
-    """items: list of {"item_name": str, "quantity": float}."""
+def _build_line_item(item: dict) -> dict:
+    """items: {"item_name": str, "quantity": float, "unit_price": float | None}.
+    rate is omitted (not sent as 0) when unit_price wasn't set — the user
+    can check out a pending item without pricing it, and Zoho defaults an
+    absent rate to 0 rather than erroring."""
+    line_item = {"name": item["item_name"], "quantity": item["quantity"]}
+    if item.get("unit_price") is not None:
+        line_item["rate"] = item["unit_price"]
+    return line_item
+
+
+def build_sales_order_payload(items: list[dict], user_id: str, user_name: str) -> dict:
+    """
+    user_name goes in reference_number (visible in the Sales Orders list
+    without opening the order); user_id goes in notes (visible on open) —
+    both are standard Zoho fields, no custom-field setup required.
+    """
     return {
         "customer_id": settings.zoho_customer_id,
-        "line_items": [
-            {"name": item["item_name"], "quantity": item["quantity"]}
-            for item in items
-        ],
+        "reference_number": user_name,
+        "notes": f"App user_id: {user_id}",
+        "line_items": [_build_line_item(item) for item in items],
     }
 
 
@@ -107,7 +121,7 @@ async def create_zoho_sales_order(order_data: dict) -> dict:
     return response.json()
 
 
-async def sync_checkout_to_zoho(items: list[dict], user_id: str) -> None:
+async def sync_checkout_to_zoho(items: list[dict], user_id: str, user_name: str) -> None:
     """
     Background-task entry point: create a Zoho Sales Order for the given
     checkout items and write the resulting salesorder_number back onto each
@@ -117,7 +131,7 @@ async def sync_checkout_to_zoho(items: list[dict], user_id: str) -> None:
     checkout response was already sent.
     """
     try:
-        payload = build_sales_order_payload(items)
+        payload = build_sales_order_payload(items, user_id, user_name)
         result = await create_zoho_sales_order(payload)
         salesorder_number = result.get("salesorder", {}).get("salesorder_number")
         if not salesorder_number:

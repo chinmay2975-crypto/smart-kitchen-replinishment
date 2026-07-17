@@ -68,6 +68,18 @@ function renderCart(items) {
                     </div>
                     <h4 class="font-semibold text-gray-800">${item.item_name}</h4>
                     <p class="text-sm text-gray-500">Quantity: ${item.quantity}</p>
+                    <div class="mt-2">
+                        <label class="text-xs text-gray-500 block mb-1">Price for this order</label>
+                        <div class="flex space-x-2">
+                            <input type="number" min="0" step="0.01" placeholder="e.g. 250"
+                                   id="price-input-${item.cart_item_id}"
+                                   value="${item.unit_price != null ? item.unit_price : ''}"
+                                   class="flex-1 px-2 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                            <button onclick="handleSavePrice('${item.cart_item_id}')" class="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-sm font-medium hover:bg-gray-200 transition">
+                                Save
+                            </button>
+                        </div>
+                    </div>
                     <p class="text-xs text-gray-400 mt-2">Added: ${new Date(item.created_at).toLocaleString()}</p>
                 </div>
             `).join('');
@@ -122,6 +134,30 @@ function renderCart(items) {
                 </div>
             `).join('');
         }
+    }
+}
+
+async function handleSavePrice(cartItemId) {
+    const input = document.getElementById(`price-input-${cartItemId}`);
+    const value = parseFloat(input.value);
+
+    if (isNaN(value) || value < 0) {
+        showToast('Enter a valid non-negative price', 'error');
+        return;
+    }
+
+    try {
+        const response = await api.updateCartItemPrice(cartItemId, value);
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast('Price saved', 'success');
+        } else {
+            showToast(data.detail || 'Failed to save price', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving price:', error);
+        showToast('Network error while saving price', 'error');
     }
 }
 

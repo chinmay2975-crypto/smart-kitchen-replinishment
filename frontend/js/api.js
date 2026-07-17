@@ -229,6 +229,14 @@ class ApiClient {
         });
         return response;
     }
+
+    async updateCartItemPrice(cartItemId, unitPrice) {
+        const response = await this.request(`/api/v1/cart/${cartItemId}/price`, {
+            method: 'PATCH',
+            body: JSON.stringify({ unit_price: unitPrice }),
+        });
+        return response;
+    }
 }
 
 // Global API instance

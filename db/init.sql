@@ -180,6 +180,8 @@ CREATE TABLE cart_items (
     status         VARCHAR(20) NOT NULL DEFAULT 'pending_cart'
                    CHECK (status IN ('pending_cart', 'placed', 'cancelled', 'delivered')),
     estimated_delivery DATE,
+    zoho_sales_order_number VARCHAR(100),
+    unit_price     NUMERIC(10,2),
     created_at     TIMESTAMPTZ DEFAULT NOW(),
     updated_at     TIMESTAMPTZ DEFAULT NOW()
 );
