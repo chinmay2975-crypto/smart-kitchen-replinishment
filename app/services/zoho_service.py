@@ -13,6 +13,7 @@ settings = get_settings()
 
 _TOKEN_URL_PATH = "/oauth/v2/token"
 _SALES_ORDER_PATH = "/inventory/v1/salesorders"
+_ITEM_PATH = "/inventory/v1/items"
 _TOKEN_TTL_SECONDS = 3300  # 55 min; Zoho tokens last 60 min — 5 min safety margin
 _MAX_429_RETRIES = 3
 _DEFAULT_RETRY_AFTER_SECONDS = 5
@@ -119,6 +120,77 @@ async def create_zoho_sales_order(order_data: dict) -> dict:
         raise ZohoAPIError(f"Zoho API error {response.status_code}: {response.text}")
 
     return response.json()
+
+
+async def get_zoho_item_by_id(item_id: str) -> dict:
+    """
+    Fetch a single Item from Zoho Inventory's own catalog and return its
+    name/rate, so a Sales Order can be priced from Zoho's catalog directly
+    instead of a manually-entered price. Raises ZohoAPIError on failure.
+    """
+    access_token = await get_zoho_access_token()
+    url = f"{settings.zoho_api_base_url}{_ITEM_PATH}/{item_id}"
+    params = {"organization_id": settings.zoho_organization_id}
+    headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(url, params=params, headers=headers)
+
+    if response.status_code >= 400:
+        raise ZohoAPIError(f"Zoho API error {response.status_code}: {response.text}")
+
+    item = response.json().get("item", {})
+    return {"name": item.get("name"), "rate": item.get("rate")}
+
+
+async def create_direct_sales_order(
+    item_id: str, quantity: float, user_id: str, user_name: str
+) -> dict:
+    """
+    Create a Sales Order for a single Zoho catalog item, priced from
+    Zoho's own Item rate (not a manually-entered price) — a separate,
+    simpler path than the cart-based checkout flow above, for orders
+    tied directly to a real Zoho Item rather than a freeform name.
+    """
+    item = await get_zoho_item_by_id(item_id)
+    order_data = {
+        "customer_id": settings.zoho_customer_id,
+        "reference_number": user_name,
+        "notes": f"App user_id: {user_id}",
+        "line_items": [
+            {
+                "item_id": item_id,
+                "name": item["name"],
+                "rate": item["rate"],
+                "quantity": quantity,
+            }
+        ],
+    }
+    return await create_zoho_sales_order(order_data)
+
+
+async def sync_direct_checkout_to_zoho(
+    item_id: str, quantity: float, user_id: str, user_name: str
+) -> None:
+    """
+    Background-task entry point for the direct item_id+quantity checkout.
+    Unlike sync_checkout_to_zoho, there's no cart_items row to write a
+    salesorder_number back onto — this flow doesn't touch our DB at all,
+    so the result is just logged. Never raises, for the same reason as
+    sync_checkout_to_zoho: the HTTP response is already sent by the time
+    this runs.
+    """
+    try:
+        result = await create_direct_sales_order(item_id, quantity, user_id, user_name)
+        salesorder_number = result.get("salesorder", {}).get("salesorder_number")
+        logger.info(
+            "Zoho direct sales order %s created for user %s (item_id=%s, quantity=%s)",
+            salesorder_number, user_id, item_id, quantity,
+        )
+    except Exception:
+        logger.exception(
+            "Zoho direct sales order sync failed for user %s (item_id=%s)", user_id, item_id
+        )
 
 
 async def sync_checkout_to_zoho(items: list[dict], user_id: str, user_name: str) -> None:

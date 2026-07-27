@@ -213,15 +213,17 @@ async function handleClaimDevice(event) {
     const name = document.getElementById('claim-name').value;
     const reorderLevelRaw = document.getElementById('claim-reorder-level').value;
     const reorderQuantityRaw = document.getElementById('claim-reorder-quantity').value;
+    const zohoItemIdRaw = document.getElementById('claim-zoho-item-id').value;
     const reorderLevel = reorderLevelRaw !== '' ? parseFloat(reorderLevelRaw) : null;
     const reorderQuantity = reorderQuantityRaw !== '' ? parseFloat(reorderQuantityRaw) : null;
+    const zohoItemId = zohoItemIdRaw !== '' ? zohoItemIdRaw.trim() : null;
 
     const submitBtn = event.target.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Claiming...';
 
     try {
-        const response = await api.claimDevice(uid, name, reorderLevel, reorderQuantity);
+        const response = await api.claimDevice(uid, name, reorderLevel, reorderQuantity, zohoItemId);
         const data = await response.json();
 
         if (response.ok) {
@@ -376,6 +378,21 @@ async function showDeviceDetail(deviceId) {
                             </div>
                         </div>
 
+                        ${device.zoho_item_id ? `
+                        <div class="mb-4 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <h4 class="font-semibold text-gray-700 mb-2">Order via Zoho</h4>
+                            <p class="text-xs text-gray-500 mb-2">
+                                Priced live from Zoho's catalog (Item ID: ${device.zoho_item_id}), not a manually entered price.
+                            </p>
+                            <div class="flex space-x-2">
+                                <input type="number" id="direct-checkout-quantity" min="0.01" step="0.01" placeholder="Quantity" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                                <button onclick="handleDirectCheckout('${device.zoho_item_id}')" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">
+                                    <i class="fas fa-bolt mr-1"></i>Order Now
+                                </button>
+                            </div>
+                        </div>
+                        ` : ''}
+
                         <button onclick="generateDemoData('${device.device_id}')" class="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition mb-2">
                             <i class="fas fa-magic mr-1"></i>Generate Demo Data
                         </button>
@@ -398,6 +415,31 @@ async function showDeviceDetail(deviceId) {
         }
     } catch (error) {
         showToast('Failed to load device details', 'error');
+    }
+}
+
+async function handleDirectCheckout(zohoItemId) {
+    const input = document.getElementById('direct-checkout-quantity');
+    const quantity = parseFloat(input.value);
+
+    if (isNaN(quantity) || quantity <= 0) {
+        showToast('Enter a valid positive quantity', 'error');
+        return;
+    }
+
+    try {
+        const response = await api.directCheckout(zohoItemId, quantity);
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast(data.message || 'Order is being created in Zoho', 'success');
+            input.value = '';
+        } else {
+            showToast(data.detail || 'Failed to place order', 'error');
+        }
+    } catch (error) {
+        console.error('Error placing direct checkout order:', error);
+        showToast('Network error while placing order', 'error');
     }
 }
 

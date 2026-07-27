@@ -69,7 +69,8 @@ CREATE TABLE devices (
     deactivated_at TIMESTAMPTZ,
     reorder_level    NUMERIC(10,2),
     reorder_quantity NUMERIC(10,2),
-    battery_level    NUMERIC(5,2) DEFAULT 100
+    battery_level    NUMERIC(5,2) DEFAULT 100,
+    zoho_item_id     VARCHAR(100)
 );
 
 -- 1.5 Product/Ingredient Catalog

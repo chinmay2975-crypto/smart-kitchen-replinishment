@@ -163,7 +163,7 @@ class ApiClient {
         return response;
     }
 
-    async claimDevice(deviceUid, deviceName, reorderLevel = null, reorderQuantity = null) {
+    async claimDevice(deviceUid, deviceName, reorderLevel = null, reorderQuantity = null, zohoItemId = null) {
         const response = await this.request('/api/v1/devices/claim', {
             method: 'POST',
             body: JSON.stringify({
@@ -171,6 +171,18 @@ class ApiClient {
                 device_name: deviceName,
                 reorder_level: reorderLevel,
                 reorder_quantity: reorderQuantity,
+                zoho_item_id: zohoItemId,
+            }),
+        });
+        return response;
+    }
+
+    async directCheckout(itemId, quantity) {
+        const response = await this.request('/api/v1/checkout', {
+            method: 'POST',
+            body: JSON.stringify({
+                item_id: itemId,
+                quantity: quantity,
             }),
         });
         return response;

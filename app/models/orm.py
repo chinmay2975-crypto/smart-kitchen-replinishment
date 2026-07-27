@@ -83,6 +83,7 @@ class Device(Base):
     reorder_level = mapped_column(Numeric(10, 2), nullable=True)
     reorder_quantity = mapped_column(Numeric(10, 2), nullable=True)
     battery_level = mapped_column(Numeric(5, 2), nullable=True, default=100)
+    zoho_item_id = mapped_column(String(100), nullable=True)
 
 
 class ProductCatalog(Base):
