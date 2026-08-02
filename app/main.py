@@ -10,7 +10,6 @@ from app.database import engine, ensure_auth_tables
 from app.routers.api import router as api_router
 from app.routers.auth import router as auth_router
 from app.routers.cart import router as cart_router
-from app.routers.checkout import router as checkout_router
 from app.routers.devices import router as devices_router
 from app.routers.iot import router as iot_router
 from app.services.data_simulator import (
@@ -135,7 +134,6 @@ app.add_middleware(
 app.include_router(api_router)
 app.include_router(auth_router)
 app.include_router(cart_router)
-app.include_router(checkout_router)
 app.include_router(devices_router)
 app.include_router(iot_router)
 

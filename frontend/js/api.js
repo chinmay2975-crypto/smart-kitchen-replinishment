@@ -177,16 +177,6 @@ class ApiClient {
         return response;
     }
 
-    async directCheckout(itemId, quantity) {
-        const response = await this.request('/api/v1/checkout', {
-            method: 'POST',
-            body: JSON.stringify({
-                item_id: itemId,
-                quantity: quantity,
-            }),
-        });
-        return response;
-    }
 
     async getDeviceTelemetry(deviceId, limit = 50) {
         const response = await this.request(`/api/v1/devices/${deviceId}/telemetry?limit=${limit}`);
@@ -242,13 +232,6 @@ class ApiClient {
         return response;
     }
 
-    async updateCartItemPrice(cartItemId, unitPrice) {
-        const response = await this.request(`/api/v1/cart/${cartItemId}/price`, {
-            method: 'PATCH',
-            body: JSON.stringify({ unit_price: unitPrice }),
-        });
-        return response;
-    }
 }
 
 // Global API instance

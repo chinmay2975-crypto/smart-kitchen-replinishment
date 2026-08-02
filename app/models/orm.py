@@ -154,7 +154,6 @@ class CartItem(Base):
     status = mapped_column(String(20), nullable=False, default="pending_cart")
     estimated_delivery = mapped_column(Date, nullable=True)
     zoho_sales_order_number = mapped_column(String(100), nullable=True)
-    unit_price = mapped_column(Numeric(10, 2), nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at = mapped_column(DateTime(timezone=True), server_default=func.now())
 

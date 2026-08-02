@@ -57,24 +57,35 @@ async def test_token_caching():
     print("PASS: token caching (second call served from cache, 1 HTTP call total)")
 
 
-def test_build_sales_order_payload():
-    """reference_number/notes carry the user identity; rate is included
-    only when unit_price was set, omitted (not zeroed) otherwise."""
-    payload = zoho_service.build_sales_order_payload(
-        [
-            {"item_name": "Rice 5kg Refill", "quantity": 2, "unit_price": 250.5},
-            {"item_name": "Oil 1L Refill", "quantity": 1, "unit_price": None},
-        ],
-        user_id="user-123",
-        user_name="Chinmay Potdar",
-    )
+async def test_build_sales_order_payload():
+    """reference_number/notes carry the user identity; a line item with a
+    linked zoho_item_id is priced from Zoho's catalog (name/rate come from
+    the mocked lookup, not our own item_name); an item without one falls
+    back to our item_name with no rate (Zoho defaults absent rate to 0)."""
+    zoho_service._cached_access_token = "cached-token"
+    zoho_service._cached_token_expiry = zoho_service.time.monotonic() + 3300
 
-    assert payload["reference_number"] == "Chinmay Potdar"
-    assert payload["notes"] == "App user_id: user-123"
-    assert payload["line_items"][0] == {"name": "Rice 5kg Refill", "quantity": 2, "rate": 250.5}
-    assert payload["line_items"][1] == {"name": "Oil 1L Refill", "quantity": 1}
-    assert "rate" not in payload["line_items"][1]
-    print("PASS: build_sales_order_payload (reference_number/notes/rate shape)")
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = _fake_item_response(name="Rice 5kg", rate=275.5)
+
+        payload = await zoho_service.build_sales_order_payload(
+            [
+                {"item_name": "Rice 5kg Refill", "quantity": 2, "zoho_item_id": "3996483000000012345"},
+                {"item_name": "Oil 1L Refill", "quantity": 1, "zoho_item_id": None},
+            ],
+            user_id="user-123",
+            user_name="Chinmay Potdar",
+        )
+
+        assert payload["reference_number"] == "Chinmay Potdar"
+        assert payload["notes"] == "App user_id: user-123"
+        assert payload["line_items"][0] == {
+            "item_id": "3996483000000012345", "name": "Rice 5kg", "rate": 275.5, "quantity": 2,
+        }
+        assert payload["line_items"][1] == {"name": "Oil 1L Refill", "quantity": 1}
+        assert "rate" not in payload["line_items"][1]
+        assert mock_get.call_count == 1
+    print("PASS: build_sales_order_payload (catalog-priced + fallback line items)")
 
 
 async def test_sales_order_creation():
@@ -82,11 +93,13 @@ async def test_sales_order_creation():
     zoho_service._cached_access_token = "cached-token"
     zoho_service._cached_token_expiry = zoho_service.time.monotonic() + 3300
 
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, \
+         patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_get.return_value = _fake_item_response(name="Rice 5kg", rate=275.5)
         mock_post.return_value = _fake_salesorder_response()
 
-        payload = zoho_service.build_sales_order_payload(
-            [{"item_name": "Rice 5kg Refill", "quantity": 2, "unit_price": 250.5}],
+        payload = await zoho_service.build_sales_order_payload(
+            [{"item_name": "Rice 5kg Refill", "quantity": 2, "zoho_item_id": "3996483000000012345"}],
             user_id="user-123",
             user_name="Chinmay Potdar",
         )
@@ -130,36 +143,6 @@ async def test_get_zoho_item_by_id():
     print("PASS: get_zoho_item_by_id (mocked catalog fetch)")
 
 
-async def test_create_direct_sales_order():
-    """create_direct_sales_order fetches the item from Zoho's catalog first,
-    then builds the order payload using Zoho's own name/rate (not a
-    manually-entered price)."""
-    zoho_service._cached_access_token = "cached-token"
-    zoho_service._cached_token_expiry = zoho_service.time.monotonic() + 3300
-
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, \
-         patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_get.return_value = _fake_item_response(name="Rice 5kg", rate=275.5)
-        mock_post.return_value = _fake_salesorder_response(so_number="SO-00789")
-
-        result = await zoho_service.create_direct_sales_order(
-            item_id="3996483000000012345", quantity=3, user_id="user-123", user_name="Chinmay Potdar"
-        )
-
-        assert result["salesorder"]["salesorder_number"] == "SO-00789"
-        assert mock_get.call_count == 1
-        posted_payload = mock_post.call_args.kwargs["json"]
-        assert posted_payload["reference_number"] == "Chinmay Potdar"
-        assert posted_payload["notes"] == "App user_id: user-123"
-        assert posted_payload["line_items"][0] == {
-            "item_id": "3996483000000012345",
-            "name": "Rice 5kg",
-            "rate": 275.5,
-            "quantity": 3,
-        }
-    print("PASS: create_direct_sales_order (catalog-priced order, mocked)")
-
-
 async def test_live_smoke():
     """Optional: only runs if ZOHO_LIVE_TEST=1 and real credentials are set."""
     if os.environ.get("ZOHO_LIVE_TEST") != "1":
@@ -178,11 +161,10 @@ async def test_live_smoke():
 
 async def main():
     await test_token_caching()
-    test_build_sales_order_payload()
+    await test_build_sales_order_payload()
     await test_sales_order_creation()
     await test_429_retry()
     await test_get_zoho_item_by_id()
-    await test_create_direct_sales_order()
     await test_live_smoke()
     print("\nAll Zoho integration tests passed.")
 

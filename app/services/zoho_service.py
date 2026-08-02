@@ -62,18 +62,31 @@ async def get_zoho_access_token() -> str:
     return access_token
 
 
-def _build_line_item(item: dict) -> dict:
-    """items: {"item_name": str, "quantity": float, "unit_price": float | None}.
-    rate is omitted (not sent as 0) when unit_price wasn't set — the user
-    can check out a pending item without pricing it, and Zoho defaults an
-    absent rate to 0 rather than erroring."""
-    line_item = {"name": item["item_name"], "quantity": item["quantity"]}
-    if item.get("unit_price") is not None:
-        line_item["rate"] = item["unit_price"]
-    return line_item
+async def _build_line_item(item: dict) -> dict:
+    """item: {"item_name": str, "quantity": float, "zoho_item_id": str | None}.
+    Prices from Zoho's own catalog when zoho_item_id is linked (the
+    device's linked Item's name/rate override item_name, and rate is
+    included); falls back to our own item_name with no rate (Zoho
+    defaults an absent rate to 0) when unlinked or the Zoho lookup fails
+    — checkout must never be blocked by a missing/bad Zoho link."""
+    zoho_item_id = item.get("zoho_item_id")
+    if zoho_item_id:
+        try:
+            zoho_item = await get_zoho_item_by_id(zoho_item_id)
+            return {
+                "item_id": zoho_item_id,
+                "name": zoho_item["name"],
+                "rate": zoho_item["rate"],
+                "quantity": item["quantity"],
+            }
+        except ZohoAPIError:
+            logger.warning(
+                "Zoho item lookup failed for %s; falling back to unpriced line item", zoho_item_id
+            )
+    return {"name": item["item_name"], "quantity": item["quantity"]}
 
 
-def build_sales_order_payload(items: list[dict], user_id: str, user_name: str) -> dict:
+async def build_sales_order_payload(items: list[dict], user_id: str, user_name: str) -> dict:
     """
     user_name goes in reference_number (visible in the Sales Orders list
     without opening the order); user_id goes in notes (visible on open) —
@@ -83,7 +96,7 @@ def build_sales_order_payload(items: list[dict], user_id: str, user_name: str) -
         "customer_id": settings.zoho_customer_id,
         "reference_number": user_name,
         "notes": f"App user_id: {user_id}",
-        "line_items": [_build_line_item(item) for item in items],
+        "line_items": [await _build_line_item(item) for item in items],
     }
 
 
@@ -143,56 +156,6 @@ async def get_zoho_item_by_id(item_id: str) -> dict:
     return {"name": item.get("name"), "rate": item.get("rate")}
 
 
-async def create_direct_sales_order(
-    item_id: str, quantity: float, user_id: str, user_name: str
-) -> dict:
-    """
-    Create a Sales Order for a single Zoho catalog item, priced from
-    Zoho's own Item rate (not a manually-entered price) — a separate,
-    simpler path than the cart-based checkout flow above, for orders
-    tied directly to a real Zoho Item rather than a freeform name.
-    """
-    item = await get_zoho_item_by_id(item_id)
-    order_data = {
-        "customer_id": settings.zoho_customer_id,
-        "reference_number": user_name,
-        "notes": f"App user_id: {user_id}",
-        "line_items": [
-            {
-                "item_id": item_id,
-                "name": item["name"],
-                "rate": item["rate"],
-                "quantity": quantity,
-            }
-        ],
-    }
-    return await create_zoho_sales_order(order_data)
-
-
-async def sync_direct_checkout_to_zoho(
-    item_id: str, quantity: float, user_id: str, user_name: str
-) -> None:
-    """
-    Background-task entry point for the direct item_id+quantity checkout.
-    Unlike sync_checkout_to_zoho, there's no cart_items row to write a
-    salesorder_number back onto — this flow doesn't touch our DB at all,
-    so the result is just logged. Never raises, for the same reason as
-    sync_checkout_to_zoho: the HTTP response is already sent by the time
-    this runs.
-    """
-    try:
-        result = await create_direct_sales_order(item_id, quantity, user_id, user_name)
-        salesorder_number = result.get("salesorder", {}).get("salesorder_number")
-        logger.info(
-            "Zoho direct sales order %s created for user %s (item_id=%s, quantity=%s)",
-            salesorder_number, user_id, item_id, quantity,
-        )
-    except Exception:
-        logger.exception(
-            "Zoho direct sales order sync failed for user %s (item_id=%s)", user_id, item_id
-        )
-
-
 async def sync_checkout_to_zoho(items: list[dict], user_id: str, user_name: str) -> None:
     """
     Background-task entry point: create a Zoho Sales Order for the given
@@ -203,7 +166,7 @@ async def sync_checkout_to_zoho(items: list[dict], user_id: str, user_name: str)
     checkout response was already sent.
     """
     try:
-        payload = build_sales_order_payload(items, user_id, user_name)
+        payload = await build_sales_order_payload(items, user_id, user_name)
         result = await create_zoho_sales_order(payload)
         salesorder_number = result.get("salesorder", {}).get("salesorder_number")
         if not salesorder_number:

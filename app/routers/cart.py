@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +40,6 @@ class CartItemResponse(BaseModel):
     status: str
     estimated_delivery: Optional[str] = None
     zoho_sales_order_number: Optional[str] = None
-    unit_price: Optional[float] = None
     created_at: str
 
 
@@ -56,15 +55,6 @@ class DeliverResponse(BaseModel):
     new_quantity: float
 
 
-class UpdatePriceRequest(BaseModel):
-    unit_price: float = Field(ge=0)
-
-
-class UpdatePriceResponse(BaseModel):
-    cart_item_id: str
-    unit_price: float
-
-
 @router.get("", response_model=list[CartItemResponse])
 async def get_cart(
     user_id: str = Depends(get_user_id_from_token),
@@ -76,7 +66,7 @@ async def get_cart(
     result = await db.execute(
         text("""
             SELECT cart_item_id, container_id, item_name, quantity,
-                   status, estimated_delivery, zoho_sales_order_number, unit_price, created_at
+                   status, estimated_delivery, zoho_sales_order_number, created_at
             FROM cart_items
             WHERE user_id = :uid AND status IN ('pending_cart', 'placed', 'delivered')
             ORDER BY created_at DESC
@@ -93,40 +83,10 @@ async def get_cart(
             status=row[4],
             estimated_delivery=str(row[5]) if row[5] else None,
             zoho_sales_order_number=row[6],
-            unit_price=float(row[7]) if row[7] is not None else None,
-            created_at=str(row[8]),
+            created_at=str(row[7]),
         )
         for row in rows
     ]
-
-
-@router.patch("/{cart_item_id}/price", response_model=UpdatePriceResponse)
-async def update_cart_item_price(
-    cart_item_id: str,
-    req: UpdatePriceRequest,
-    user_id: str = Depends(get_user_id_from_token),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Set/update the price for a still-pending cart item, right before
-    checkout. Price lives on the order itself (not the device) since the
-    same container's reorder price can vary between purchases. Scoped to
-    pending_cart items only — an already-checked-out order can't be repriced.
-    """
-    result = await db.execute(
-        text("""
-            UPDATE cart_items
-            SET unit_price = :price, updated_at = NOW()
-            WHERE cart_item_id = :cid AND user_id = :uid AND status = 'pending_cart'
-            RETURNING cart_item_id
-        """),
-        {"cid": cart_item_id, "uid": user_id, "price": req.unit_price},
-    )
-    if result.first() is None:
-        raise HTTPException(status_code=404, detail="Pending cart item not found")
-    await db.commit()
-
-    return UpdatePriceResponse(cart_item_id=cart_item_id, unit_price=req.unit_price)
 
 
 @router.post("/checkout", response_model=CheckoutResponse)
@@ -150,7 +110,7 @@ async def checkout_cart(
     items_result = await db.execute(
         text("""
             SELECT c.cart_item_id, c.container_id, c.item_name, c.quantity,
-                   c.unit_price, d.reorder_level, d.reorder_quantity
+                   d.reorder_level, d.reorder_quantity, d.zoho_item_id
             FROM cart_items c
             JOIN devices d ON d.device_id = c.container_id
             WHERE c.user_id = :uid AND c.status = 'pending_cart'
@@ -161,7 +121,7 @@ async def checkout_cart(
 
     checkout_items_for_zoho = []
 
-    for cart_item_id, container_id, item_name, cart_quantity, unit_price, reorder_level, reorder_quantity in items:
+    for cart_item_id, container_id, item_name, cart_quantity, reorder_level, reorder_quantity, zoho_item_id in items:
         restock_amount = float(reorder_quantity) if reorder_quantity is not None else float(cart_quantity)
         new_quantity = float(reorder_level or 0) + restock_amount
 
@@ -189,7 +149,7 @@ async def checkout_cart(
             "cart_item_id": str(cart_item_id),
             "item_name": item_name,
             "quantity": float(cart_quantity),
-            "unit_price": float(unit_price) if unit_price is not None else None,
+            "zoho_item_id": zoho_item_id,
         })
 
     await db.commit()
