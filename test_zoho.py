@@ -143,6 +143,67 @@ async def test_get_zoho_item_by_id():
     print("PASS: get_zoho_item_by_id (mocked catalog fetch)")
 
 
+def _fake_creditnotes_list_response(balances):
+    """balances: list of floats, one open credit note per balance."""
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    mock_resp.text = ""
+    mock_resp.json = lambda: {
+        "creditnotes": [
+            {"creditnote_id": f"cn-{i}", "balance": b} for i, b in enumerate(balances)
+        ]
+    }
+    return mock_resp
+
+
+def _fake_ok_response():
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    mock_resp.text = ""
+    mock_resp.json = lambda: {"code": 0, "message": "ok"}
+    return mock_resp
+
+
+async def test_wallet_credit_sufficient_balance():
+    """When total open credit >= invoice total, credit is applied — even
+    when it takes more than one credit note to fully cover the amount."""
+    zoho_service._cached_access_token = "cached-token"
+    zoho_service._cached_token_expiry = zoho_service.time.monotonic() + 3300
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, \
+         patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_get.return_value = _fake_creditnotes_list_response([120.0, 100.0])  # 220 total
+        mock_post.return_value = _fake_ok_response()
+
+        applied = await zoho_service.apply_wallet_credit_if_sufficient(
+            {"invoice_id": "inv-1", "total": 200.0}
+        )
+
+        assert applied is True
+        # 200 needed: 120 from the first note, 80 from the second — two applies.
+        assert mock_post.call_count == 2
+    print("PASS: wallet credit applied when balance is sufficient (spans multiple credit notes)")
+
+
+async def test_wallet_credit_insufficient_balance():
+    """When total open credit < invoice total, nothing is applied at all
+    (all-or-nothing, no partial application)."""
+    zoho_service._cached_access_token = "cached-token"
+    zoho_service._cached_token_expiry = zoho_service.time.monotonic() + 3300
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, \
+         patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_get.return_value = _fake_creditnotes_list_response([50.0])  # only 50 available
+
+        applied = await zoho_service.apply_wallet_credit_if_sufficient(
+            {"invoice_id": "inv-2", "total": 200.0}
+        )
+
+        assert applied is False
+        assert mock_post.call_count == 0
+    print("PASS: wallet credit skipped entirely when balance is insufficient")
+
+
 async def test_live_smoke():
     """Optional: only runs if ZOHO_LIVE_TEST=1 and real credentials are set."""
     if os.environ.get("ZOHO_LIVE_TEST") != "1":
@@ -165,6 +226,8 @@ async def main():
     await test_sales_order_creation()
     await test_429_retry()
     await test_get_zoho_item_by_id()
+    await test_wallet_credit_sufficient_balance()
+    await test_wallet_credit_insufficient_balance()
     await test_live_smoke()
     print("\nAll Zoho integration tests passed.")
 

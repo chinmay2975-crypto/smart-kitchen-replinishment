@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     enable_simulation: bool = False
 
     zoho_enabled: bool = False
+    zoho_wallet_enabled: bool = False
     zoho_client_id: str = ""
     zoho_client_secret: str = ""
     zoho_refresh_token: str = ""

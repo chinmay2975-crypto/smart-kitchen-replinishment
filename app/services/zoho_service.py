@@ -14,6 +14,8 @@ settings = get_settings()
 _TOKEN_URL_PATH = "/oauth/v2/token"
 _SALES_ORDER_PATH = "/inventory/v1/salesorders"
 _ITEM_PATH = "/inventory/v1/items"
+_INVOICE_PATH = "/inventory/v1/invoices"
+_CREDITNOTE_PATH = "/inventory/v1/creditnotes"
 _TOKEN_TTL_SECONDS = 3300  # 55 min; Zoho tokens last 60 min — 5 min safety margin
 _MAX_429_RETRIES = 3
 _DEFAULT_RETRY_AFTER_SECONDS = 5
@@ -156,6 +158,112 @@ async def get_zoho_item_by_id(item_id: str) -> dict:
     return {"name": item.get("name"), "rate": item.get("rate")}
 
 
+async def create_zoho_invoice(items: list[dict], user_id: str, user_name: str) -> dict:
+    """
+    Create a standalone Invoice with the same line items/pricing as the
+    Sales Order — NOT linked to the Sales Order via Zoho's API, since
+    that conversion proved unreliable (tried salesorder_item_id and
+    line_item_id as the linking field; both rejected). Two independent
+    records for the same purchase is an accepted trade-off: the Sales
+    Order still tracks the order, and this Invoice is what wallet credit
+    actually gets applied against (Zoho only supports applying credit
+    notes to Invoices, not Sales Orders).
+    """
+    access_token = await get_zoho_access_token()
+    url = f"{settings.zoho_api_base_url}{_INVOICE_PATH}"
+    params = {"organization_id": settings.zoho_organization_id}
+    headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
+    payload = {
+        "customer_id": settings.zoho_customer_id,
+        "reference_number": user_name,
+        "notes": f"App user_id: {user_id}",
+        "line_items": [await _build_line_item(item) for item in items],
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(url, params=params, headers=headers, json=payload)
+
+    if response.status_code >= 400:
+        raise ZohoAPIError(f"Zoho API error {response.status_code}: {response.text}")
+
+    return response.json()
+
+
+async def get_open_credit_notes(customer_id: str) -> list[dict]:
+    """List a customer's open (unapplied-balance) Credit Notes — Zoho's
+    representation of stored/prepaid customer credit ("wallet balance")."""
+    access_token = await get_zoho_access_token()
+    url = f"{settings.zoho_api_base_url}{_CREDITNOTE_PATH}"
+    params = {
+        "organization_id": settings.zoho_organization_id,
+        "customer_id": customer_id,
+        "status": "open",
+    }
+    headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(url, params=params, headers=headers)
+
+    if response.status_code >= 400:
+        raise ZohoAPIError(f"Zoho API error {response.status_code}: {response.text}")
+
+    return response.json().get("creditnotes", [])
+
+
+async def apply_credit_to_invoice(creditnote_id: str, invoice_id: str, amount: float) -> None:
+    """POST /creditnotes/{id}/invoices — applies `amount` of the given
+    credit note's balance to the given invoice. Verified live: reduces
+    the invoice's balance and the credit note's remaining balance."""
+    access_token = await get_zoho_access_token()
+    url = f"{settings.zoho_api_base_url}{_CREDITNOTE_PATH}/{creditnote_id}/invoices"
+    params = {"organization_id": settings.zoho_organization_id}
+    headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
+    payload = {"invoices": [{"invoice_id": invoice_id, "amount_applied": amount}]}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(url, params=params, headers=headers, json=payload)
+
+    if response.status_code >= 400:
+        raise ZohoAPIError(f"Zoho API error {response.status_code}: {response.text}")
+
+
+async def apply_wallet_credit_if_sufficient(invoice: dict) -> bool:
+    """
+    All-or-nothing (per decision): only applies credit when the customer's
+    total open credit balance covers the full invoice amount. If it
+    doesn't, applies nothing and leaves the invoice fully unpaid — no
+    partial application. May draw from multiple credit notes to cover one
+    invoice. Returns True if credit was applied.
+    """
+    invoice_total = float(invoice.get("total", 0))
+    invoice_id = invoice.get("invoice_id")
+    if invoice_total <= 0 or not invoice_id:
+        return False
+
+    credit_notes = await get_open_credit_notes(settings.zoho_customer_id)
+    total_available = sum(float(cn.get("balance", 0)) for cn in credit_notes)
+
+    if total_available < invoice_total:
+        logger.info(
+            "Wallet balance %.2f insufficient for invoice %.2f (total); skipping credit application",
+            total_available, invoice_total,
+        )
+        return False
+
+    remaining = invoice_total
+    for cn in credit_notes:
+        if remaining <= 0:
+            break
+        amount_to_apply = min(float(cn.get("balance", 0)), remaining)
+        if amount_to_apply <= 0:
+            continue
+        await apply_credit_to_invoice(cn["creditnote_id"], invoice_id, amount_to_apply)
+        remaining -= amount_to_apply
+
+    logger.info("Wallet credit fully covered invoice %s (total %.2f)", invoice_id, invoice_total)
+    return True
+
+
 async def sync_checkout_to_zoho(items: list[dict], user_id: str, user_name: str) -> None:
     """
     Background-task entry point: create a Zoho Sales Order for the given
@@ -189,5 +297,18 @@ async def sync_checkout_to_zoho(items: list[dict], user_id: str, user_name: str)
             "Zoho sales order %s created for user %s (%d item(s))",
             salesorder_number, user_id, len(items),
         )
+
+        if settings.zoho_wallet_enabled:
+            try:
+                invoice_result = await create_zoho_invoice(items, user_id, user_name)
+                invoice = invoice_result.get("invoice", {})
+                await apply_wallet_credit_if_sufficient(invoice)
+            except Exception:
+                # Sales order already succeeded above — a wallet/invoice
+                # failure here must not undo or mask that success.
+                logger.exception(
+                    "Zoho wallet invoice/credit step failed for user %s (sales order %s already created)",
+                    user_id, salesorder_number,
+                )
     except Exception:
         logger.exception("Zoho sales order sync failed for user %s (checkout already completed)", user_id)
