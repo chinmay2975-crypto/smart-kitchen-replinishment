@@ -12,6 +12,7 @@ from app.routers.auth import router as auth_router
 from app.routers.cart import router as cart_router
 from app.routers.devices import router as devices_router
 from app.routers.iot import router as iot_router
+from app.routers.wallet import router as wallet_router
 from app.services.data_simulator import (
     run_container_simulation,
     run_telemetry_simulation,
@@ -136,6 +137,7 @@ app.include_router(auth_router)
 app.include_router(cart_router)
 app.include_router(devices_router)
 app.include_router(iot_router)
+app.include_router(wallet_router)
 
 
 @app.get("/")

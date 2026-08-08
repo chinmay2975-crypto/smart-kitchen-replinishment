@@ -204,6 +204,48 @@ async def test_wallet_credit_insufficient_balance():
     print("PASS: wallet credit skipped entirely when balance is insufficient")
 
 
+def _fake_creditnote_create_response(amount=100.0, cn_number="CN-00001"):
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    mock_resp.text = ""
+    mock_resp.json = lambda: {
+        "creditnote": {"creditnote_number": cn_number, "total": amount, "balance": amount}
+    }
+    return mock_resp
+
+
+async def test_create_credit_note():
+    """create_credit_note posts a top-up as a Credit Note with the user's
+    identity in reference_number/notes, same convention as orders/invoices."""
+    zoho_service._cached_access_token = "cached-token"
+    zoho_service._cached_token_expiry = zoho_service.time.monotonic() + 3300
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _fake_creditnote_create_response(amount=250.0)
+
+        result = await zoho_service.create_credit_note(250.0, "Wallet top-up", "user-123", "Chinmay Potdar")
+
+        assert result["creditnote"]["total"] == 250.0
+        posted_payload = mock_post.call_args.kwargs["json"]
+        assert posted_payload["reference_number"] == "Chinmay Potdar"
+        assert posted_payload["line_items"][0] == {"name": "Wallet top-up", "rate": 250.0, "quantity": 1}
+    print("PASS: create_credit_note (mocked top-up)")
+
+
+async def test_get_wallet_balance():
+    """get_wallet_balance sums the balance across all open credit notes."""
+    zoho_service._cached_access_token = "cached-token"
+    zoho_service._cached_token_expiry = zoho_service.time.monotonic() + 3300
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = _fake_creditnotes_list_response([120.0, 80.5])
+
+        balance = await zoho_service.get_wallet_balance()
+
+        assert balance == 200.5
+    print("PASS: get_wallet_balance (summed across multiple credit notes)")
+
+
 async def test_live_smoke():
     """Optional: only runs if ZOHO_LIVE_TEST=1 and real credentials are set."""
     if os.environ.get("ZOHO_LIVE_TEST") != "1":
@@ -228,6 +270,8 @@ async def main():
     await test_get_zoho_item_by_id()
     await test_wallet_credit_sufficient_balance()
     await test_wallet_credit_insufficient_balance()
+    await test_create_credit_note()
+    await test_get_wallet_balance()
     await test_live_smoke()
     print("\nAll Zoho integration tests passed.")
 

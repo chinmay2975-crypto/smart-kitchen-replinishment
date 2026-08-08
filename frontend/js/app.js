@@ -45,6 +45,10 @@ function switchTab(tabName) {
         loadCart();
         loadDashboard(); // also populates the Recent Replenishment Orders table
     }
+
+    if (tabName === 'profile') {
+        loadWallet();
+    }
 }
 
 // Initialize the app

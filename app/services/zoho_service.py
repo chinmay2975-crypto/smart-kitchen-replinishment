@@ -158,6 +158,40 @@ async def get_zoho_item_by_id(item_id: str) -> dict:
     return {"name": item.get("name"), "rate": item.get("rate")}
 
 
+async def create_credit_note(amount: float, description: str, user_id: str, user_name: str) -> dict:
+    """
+    Top up the customer's Zoho wallet balance by creating a Credit Note
+    for `amount` — this is the actual mechanism a stored/prepaid balance
+    is represented by in Zoho (verified live: a credit note's `balance`
+    is what apply_wallet_credit_if_sufficient later draws down).
+    """
+    access_token = await get_zoho_access_token()
+    url = f"{settings.zoho_api_base_url}{_CREDITNOTE_PATH}"
+    params = {"organization_id": settings.zoho_organization_id}
+    headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
+    payload = {
+        "customer_id": settings.zoho_customer_id,
+        "reference_number": user_name,
+        "notes": f"App user_id: {user_id} | {description}" if description else f"App user_id: {user_id}",
+        "line_items": [{"name": description or "Wallet top-up", "rate": amount, "quantity": 1}],
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(url, params=params, headers=headers, json=payload)
+
+    if response.status_code >= 400:
+        raise ZohoAPIError(f"Zoho API error {response.status_code}: {response.text}")
+
+    return response.json()
+
+
+async def get_wallet_balance() -> float:
+    """Sum of all open Credit Notes' balances for the fixed customer —
+    the total available wallet credit."""
+    credit_notes = await get_open_credit_notes(settings.zoho_customer_id)
+    return sum(float(cn.get("balance", 0)) for cn in credit_notes)
+
+
 async def create_zoho_invoice(items: list[dict], user_id: str, user_name: str) -> dict:
     """
     Create a standalone Invoice with the same line items/pricing as the

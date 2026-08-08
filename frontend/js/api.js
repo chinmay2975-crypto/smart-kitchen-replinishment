@@ -232,6 +232,19 @@ class ApiClient {
         return response;
     }
 
+    // Wallet
+    async getWalletBalance() {
+        const response = await this.request('/api/v1/wallet/balance');
+        return response;
+    }
+
+    async topupWallet(amount, description = null) {
+        const response = await this.request('/api/v1/wallet/topup', {
+            method: 'POST',
+            body: JSON.stringify({ amount, description }),
+        });
+        return response;
+    }
 }
 
 // Global API instance
