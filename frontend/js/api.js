@@ -245,6 +245,11 @@ class ApiClient {
         });
         return response;
     }
+
+    async getWalletTransactions() {
+        const response = await this.request('/api/v1/wallet/transactions');
+        return response;
+    }
 }
 
 // Global API instance

@@ -244,6 +244,47 @@ async def get_open_credit_notes(customer_id: str) -> list[dict]:
     return response.json().get("creditnotes", [])
 
 
+async def list_credit_notes(customer_id: str) -> list[dict]:
+    """List all Credit Notes (any status) for a customer — used for the
+    wallet transaction history's credit (top-up) side, unlike
+    get_open_credit_notes which only returns still-unapplied ones."""
+    access_token = await get_zoho_access_token()
+    url = f"{settings.zoho_api_base_url}{_CREDITNOTE_PATH}"
+    params = {
+        "organization_id": settings.zoho_organization_id,
+        "customer_id": customer_id,
+    }
+    headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(url, params=params, headers=headers)
+
+    if response.status_code >= 400:
+        raise ZohoAPIError(f"Zoho API error {response.status_code}: {response.text}")
+
+    return response.json().get("creditnotes", [])
+
+
+async def list_invoices(customer_id: str) -> list[dict]:
+    """List all Invoices for a customer — used for the wallet transaction
+    history's debit side (checkouts paid down with wallet credit)."""
+    access_token = await get_zoho_access_token()
+    url = f"{settings.zoho_api_base_url}{_INVOICE_PATH}"
+    params = {
+        "organization_id": settings.zoho_organization_id,
+        "customer_id": customer_id,
+    }
+    headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(url, params=params, headers=headers)
+
+    if response.status_code >= 400:
+        raise ZohoAPIError(f"Zoho API error {response.status_code}: {response.text}")
+
+    return response.json().get("invoices", [])
+
+
 async def apply_credit_to_invoice(creditnote_id: str, invoice_id: str, amount: float) -> None:
     """POST /creditnotes/{id}/invoices — applies `amount` of the given
     credit note's balance to the given invoice. Verified live: reduces

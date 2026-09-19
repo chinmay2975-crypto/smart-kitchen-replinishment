@@ -48,6 +48,53 @@ async function loadWallet() {
     } catch (error) {
         console.error('Wallet load error:', error);
         section.classList.add('hidden');
+        return;
+    }
+
+    loadPaymentHistory();
+}
+
+async function loadPaymentHistory() {
+    const section = document.getElementById('payment-history-section');
+    const list = document.getElementById('payment-history-list');
+    if (!api.isAuthenticated() || !section || !list) return;
+
+    try {
+        const response = await api.getWalletTransactions();
+        if (!response.ok) {
+            section.classList.add('hidden');
+            return;
+        }
+        const transactions = await response.json();
+        section.classList.remove('hidden');
+
+        if (transactions.length === 0) {
+            list.innerHTML = '<p class="text-sm text-gray-400">No transactions yet.</p>';
+            return;
+        }
+
+        list.innerHTML = transactions.map(tx => {
+            const isCredit = tx.type === 'credit';
+            const sign = isCredit ? '+' : '-';
+            const colorClass = isCredit ? 'text-green-600' : 'text-red-600';
+            const icon = isCredit ? 'fa-arrow-down' : 'fa-arrow-up';
+            const dateStr = tx.date ? new Date(tx.date).toLocaleDateString() : '';
+            return `
+                <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas ${icon} ${colorClass}"></i>
+                        <div>
+                            <p class="text-sm font-medium text-gray-800">${tx.description}</p>
+                            <p class="text-xs text-gray-400">${tx.number || ''}${tx.number && dateStr ? ' • ' : ''}${dateStr}</p>
+                        </div>
+                    </div>
+                    <span class="text-sm font-semibold ${colorClass}">${sign}₹${tx.amount.toFixed(2)}</span>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Payment history load error:', error);
+        section.classList.add('hidden');
     }
 }
 
@@ -72,6 +119,7 @@ async function handleWalletTopup() {
             showToast(`₹${amount.toFixed(2)} added — new balance ₹${data.new_balance.toFixed(2)}`, 'success');
             input.value = '';
             document.getElementById('wallet-balance').textContent = `₹${data.new_balance.toFixed(2)}`;
+            loadPaymentHistory();
         } else {
             showToast(data.detail || 'Failed to add credit', 'error');
         }

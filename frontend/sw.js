@@ -3,7 +3,7 @@
 // any /api/ calls, since the app is almost entirely live-data driven and a
 // stale cached API response would be a worse experience than no offline
 // support at all.
-const CACHE_VERSION = 'smart-kitchen-v2'; // bump when shell files change
+const CACHE_VERSION = 'smart-kitchen-v3'; // bump when shell files change
 
 const APP_SHELL = [
     '/',
@@ -50,8 +50,12 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // { cache: 'no-store' } bypasses the browser's own HTTP cache — without
+    // it, this "network-first" fetch could still be silently satisfied from
+    // a stale disk-cached response (Cache-Control: max-age=3600 on these
+    // files), defeating the point of going to the network at all.
     event.respondWith(
-        fetch(event.request)
+        fetch(event.request, { cache: 'no-store' })
             .then((networkResponse) => {
                 const responseClone = networkResponse.clone();
                 caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, responseClone));
