@@ -1,0 +1,22 @@
+workflows:
+  ios-unsigned-sideload:
+    name: iOS unsigned build (for Sideloadly)
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    working_directory: mobile_app
+    environment:
+      flutter: stable
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build unsigned iOS app
+        script: |
+          flutter build ios --release --no-codesign
+      - name: Package unsigned .ipa
+        script: |
+          mkdir -p build/ios/iphoneos/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
+          cd build/ios/iphoneos
+          zip -r ../../../unsigned.ipa Payload
+    artifacts:
+      - mobile_app/unsigned.ipa
