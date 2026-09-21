@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Thrown when a secure-storage platform-channel call (Android Keystore /
@@ -20,12 +21,27 @@ class TokenStorage {
   TokenStorage({FlutterSecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorage();
 
-  Future<String?> get accessToken => _storage
-      .read(key: _accessTokenKey)
-      .timeout(_storageTimeout, onTimeout: () => throw SecureStorageTimeoutException());
-  Future<String?> get refreshToken => _storage
-      .read(key: _refreshTokenKey)
-      .timeout(_storageTimeout, onTimeout: () => throw SecureStorageTimeoutException());
+  // Android's Keystore-backed encryption key can become invalidated while
+  // the previously-encrypted value stays behind (observed after reinstalling
+  // over an older build) — every read then throws a PlatformException
+  // wrapping BadPaddingException/BAD_DECRYPT. That data is unrecoverable
+  // either way, so treat it as "no session" and wipe it rather than
+  // surfacing a crash on every request that touches storage (including
+  // login, since the request interceptor reads the token unconditionally).
+  Future<String?> _readSafely(String key) async {
+    try {
+      return await _storage.read(key: key).timeout(
+            _storageTimeout,
+            onTimeout: () => throw SecureStorageTimeoutException(),
+          );
+    } on PlatformException {
+      await _storage.deleteAll();
+      return null;
+    }
+  }
+
+  Future<String?> get accessToken => _readSafely(_accessTokenKey);
+  Future<String?> get refreshToken => _readSafely(_refreshTokenKey);
 
   Future<void> saveTokens({
     required String accessToken,
