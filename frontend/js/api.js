@@ -1,7 +1,7 @@
 // API Configuration and Client
 // For local development, use: 'http://localhost:8000
-// For production (Cloud Run), use: 'https://smart-kitchen-api-309488529038.asia-south1.run.app'
-const API_BASE = 'https://smart-kitchen-api-309488529038.asia-south1.run.app';
+// For production (Cloud Run), use: 'https://smart-kitchen-api-w7czcpazba-el.a.run.app'
+const API_BASE = 'https://smart-kitchen-api-w7czcpazba-el.a.run.app';
 
 class ApiClient {
     constructor() {
